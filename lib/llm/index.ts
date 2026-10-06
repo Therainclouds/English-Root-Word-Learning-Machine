@@ -27,6 +27,14 @@ export interface LlmProvider {
 
 const MAX_TOKENS = 4096;
 const ATTEMPTS = 3;
+/**
+ * 单次调用的**总**时间预算。
+ * 之前 30s 超时 × 3 次尝试 + 退避 ≈ 93s，端点不通时界面像卡死；
+ * 现在整次调用最多 25s，且剩余预算不足以再试一次就直接报错，让用户能马上排查。
+ */
+const TOTAL_BUDGET_MS = 25_000;
+/** 剩余预算低于此值就不再重试，直接把错误交给用户 */
+const MIN_ATTEMPT_MS = 8_000;
 
 function extractSystem(messages: LlmMessage[]) {
   return messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
@@ -226,9 +234,21 @@ export function createProvider(cfg: LlmConfig, timeoutMs = DEFAULT_TIMEOUT_MS): 
       let attempts = 0;
       try {
         const text = await withRetry(
-          async () => {
+          async (attempt) => {
+            const left = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+            if (attempt > 1 && left < MIN_ATTEMPT_MS) {
+              throw new LlmError(
+                `大模型响应太慢：已用满 ${Math.round(TOTAL_BUDGET_MS / 1000)}s 预算仍无结果。` +
+                  `请到设置页点「测试连通」检查端点与密钥，或换用更快的模型 / 本地代理。`,
+                undefined,
+                false,
+              );
+            }
             const transport = build(cfg, messages);
-            const res = await requestWithTimeout(transport.url, transport.init, { timeoutMs, signal });
+            const res = await requestWithTimeout(transport.url, transport.init, {
+              timeoutMs: Math.max(1_000, Math.min(timeoutMs, left)),
+              signal,
+            });
             const json = await res.json();
             return transport.extract(json);
           },

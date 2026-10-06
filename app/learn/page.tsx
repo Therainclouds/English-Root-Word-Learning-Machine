@@ -156,7 +156,9 @@ export default function LearnPage() {
         setQuality(checked);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '大模型请求失败');
+      setError(
+        `${err instanceof Error ? err.message : '大模型请求失败'}（可在设置页点「测试连通」排查）`,
+      );
     } finally {
       setBusy(false);
     }
@@ -350,9 +352,14 @@ export default function LearnPage() {
 
       <aside className="space-y-3 rounded-2xl border border-border/60 bg-card/40 p-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">大模型辅助</div>
+          <div>
+            <div className="text-sm font-medium">看不懂？用大模型解析</div>
+            <div className="text-xs text-muted-foreground">
+              只帮你理解，不参与排程；先作答，需要时再用
+            </div>
+          </div>
           {settings.llm.enabled ? (
-            <span className="text-xs text-emerald-400">已启用 · {settings.llm.provider}</span>
+            <span className="text-xs text-emerald-400">已启用</span>
           ) : (
             <Link href="/settings" className="text-xs text-primary hover:underline">
               去配置
@@ -360,6 +367,14 @@ export default function LearnPage() {
           )}
         </div>
 
+        {/* 作答之前不展示解析入口：避免把"理解"当成学习流程的第一步 */}
+        {!judged ? (
+          <p className="text-xs text-muted-foreground">
+            先在卡片上作答。答完后如果还不明白为什么是这个意思、或想知道搭配与易混辨析，
+            可以在这里调用大模型。
+          </p>
+        ) : (
+          <>
         {!settings.llm.enabled ? (
           <p className="text-xs text-muted-foreground">
             在设置页填入供应商与密钥后，可生成分级释义、多语境例句、搭配与易混辨析。
@@ -468,6 +483,8 @@ export default function LearnPage() {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
       </aside>
     </div>
