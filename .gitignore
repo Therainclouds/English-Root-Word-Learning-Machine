@@ -8,8 +8,6 @@ next-env.d.ts
 .env*.local
 proxy/.env
 public/wordlists/
-# 抓取产物（含第三方内容，CC BY-NC-ND 不宜再分发），各人用脚本自行抓取
-public/passages/ted.json
 
 # 本地构建残留 / 运行日志 / IDE 数据
 *.old/

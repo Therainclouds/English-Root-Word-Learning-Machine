@@ -2,7 +2,7 @@
 
 import { cardsRepo, getSharedDb, passagesRepo, pathRepo, sentencesRepo, wordsRepo } from '../db';
 import { buildPassageEntities } from './passages';
-import type { Card, Cefr, FreqBand, Passage, Sentence, Sense, Word, WordFamily } from '../types';
+import type { Card, Cefr, FreqBand, Sentence, Sense, Word, WordFamily } from '../types';
 import { SEED_WORDS } from './seed-words';
 import { PATH_NODES, assignTargetFamilies } from './path-nodes';
 
@@ -182,41 +182,3 @@ export async function ensurePassagesSeeded() {
   await sentencesRepo.bulkPut(sentences);
 }
 
-/**
- * 外部读物：`scripts/fetch-ted.mjs` 抓到的 TED 演讲文稿（public/passages/ted.json）。
- * 按 id 增量并入，不覆盖已有；文件不存在或离线时静默跳过。
- * 注意 CC BY–NC–ND：这里只做入库展示，不改写内容。
- */
-export async function ensureExternalPassages(): Promise<number> {
-  try {
-    const res = await fetch('/passages/ted.json', { cache: 'no-cache' });
-    if (!res.ok) return 0;
-    const rows = (await res.json()) as Array<{
-      id: string;
-      title: string;
-      text: string;
-      cefr?: Cefr;
-      topic?: string;
-      source?: string;
-      tokenCount?: number;
-    }>;
-    if (!Array.isArray(rows) || !rows.length) return 0;
-
-    const passages: Passage[] = rows
-      .filter((r) => r?.id && r?.title && r?.text)
-      .map((r) => ({
-        id: r.id,
-        title: r.title,
-        text: r.text,
-        source: r.source ?? 'external',
-        cefr: r.cefr ?? 'B2',
-        topic: r.topic ?? 'ted',
-        tokenCount: r.tokenCount ?? r.text.split(/\s+/).filter(Boolean).length,
-      }));
-
-    await passagesRepo.bulkPut(passages);
-    return passages.length;
-  } catch {
-    return 0; // 没有抓取过就没这个文件，不影响正常启动
-  }
-}

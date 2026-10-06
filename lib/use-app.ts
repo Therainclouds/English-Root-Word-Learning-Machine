@@ -20,7 +20,7 @@ import {
   settingsRepo,
   wordsRepo,
 } from './db';
-import { ensureExternalPassages, ensurePassagesSeeded, ensureSeeded } from './data/seed';
+import { ensurePassagesSeeded, ensureSeeded } from './data/seed';
 import { setLlmUser } from './llm/telemetry';
 import { buildSession, createInitialState, schedule } from './srs';
 import { computeKnownFamilies, computeRuntime } from './path';
@@ -88,7 +88,6 @@ export function useApp() {
       await migrateUserContentToShared(userId);
       await ensureSeeded();
       await ensurePassagesSeeded();
-      await ensureExternalPassages(); // TED 抓取的文稿（没有则静默跳过）
 
       const [f, w, s, c, n, pg] = await Promise.all([
         wordsRepo.allFamilies(),

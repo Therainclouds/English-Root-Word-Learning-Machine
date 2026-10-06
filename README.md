@@ -50,7 +50,7 @@ node scripts/fetch-wordlist.mjs 3000    # → public/wordlists/top-10000.txt
 | `npm run dev` / `build` / `clean` | 开发 / 静态导出 / 清理缓存 |
 | `npm run proxy` | 本地转发代理（绕开第三方大模型的 CORS） |
 | `node scripts/fetch-wordlist.mjs [n]` | 下载公开词频表 |
-| `node scripts/fetch-ted.mjs <slug…>` | 抓 TED 演讲文稿 → `public/passages/ted.json`（含难度估算） |
+
 | `node scripts/mock-llm.mjs` | 本地 mock 大模型端点（`/ok` `/fail` `/auth` `/empty` `/word`） |
 | `node scripts/check-page.mjs [url]` | 打开页面收集控制台错误与渲染文本 |
 | `node scripts/verify-s001.mjs` | 词表导入验收（11 项） |
@@ -157,30 +157,10 @@ npm run dev
 词形按轻量后缀还原近似匹配（`s/es/ed/ing/ly/er/est`），
 因此 `comes`、`waiting` 不会被误判为生词。
 
-### 外部读物：TED 演讲文稿
-
-```bash
-node scripts/fetch-ted.mjs dan_gilbert_the_surprising_science_of_happiness
-node scripts/fetch-ted.mjs --file scripts/ted-slugs.txt     # 批量（每行一个 slug 或链接）
-```
-
-抓取 → 清洗（只去时间轴与掌声标记）→ 估算难度 → 写入 `public/passages/ted.json`，
-应用启动时按 id 增量并入共享库，阅读页会出现 `ted` 分组。
-
-难度给两个口径（差异大是正常的）：
-
-| 指标 | 含义 | TED 实测 |
-| --- | --- | --- |
-| `unknownRate` | 按**词形去重**的生词率（与阅读页口径一致） | 34%–44% → **C1** |
-| `tokenCoverage` | 按**出现次数**的 K1–K3 覆盖率（Nation 口径） | 82%–83% |
-
-⚠️ **TED 远超可理解输入区间（2%–5%）**：对 K1–K3 阶段几乎是无效输入，
-只建议作为**阶段 3 进阶素材**，或先把它当作"听读挑战"而不是精读材料。
-脚本在生词率 > 10% 时会打印警示。
-
-**授权**：TED Talks 为 **CC BY–NC–ND** —— 已保留署名与原文链接（写入 `source` 字段），
-仅本地自用（NC），且脚本**不改写、不翻译、不删段**（ND）。
-若要公开分发 `public/passages/ted.json`，请先自行确认授权范围。
+> 外部素材（如 TED 演讲文稿）曾做过一版抓取脚本并已移除：实测生词率 34%–44%，
+> 远超可理解输入区间（2%–5%），对 K1–K3 阶段属于无效输入。
+> 阅读素材应优先选**用词受控**的分级读物（VOA Learning English、Breaking News English 等），
+> 真要引入外部文章，先算生词率、只保留落在 2%–5% 的那批。
 
 ## 学习页：客观作答（D12）
 
