@@ -7,14 +7,19 @@ import {
   BookOpen,
   BookOpenCheck,
   GraduationCap,
+  Monitor,
+  Moon,
   Route,
   Settings2,
+  Sun,
   Trash2,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppContext } from './app-provider';
+import { useTheme } from './theme-provider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const LINKS = [
   { href: '/', label: '学习路径', icon: Route },
@@ -27,7 +32,11 @@ const LINKS = [
 export function SiteNav() {
   const pathname = usePathname();
   const { users, userId, switchUser, addUser, renameAccount, removeAccount } = useAppContext();
+  const { theme, resolved, cycle } = useTheme();
   const current = users.find((u) => u.id === userId);
+  const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
+  const themeLabel =
+    theme === 'light' ? '浅色' : theme === 'dark' ? '深色' : `跟随系统（当前${resolved === 'dark' ? '深色' : '浅色'}）`;
 
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -75,20 +84,33 @@ export function SiteNav() {
         </nav>
 
         <div className="relative flex items-center gap-1.5">
-          <div className="flex items-center gap-1.5 rounded-md border border-border bg-card/50 px-2 py-1">
-            <Users className="size-3.5 text-muted-foreground" />
-            <select
-              value={userId ?? ''}
-              onChange={(e) => switchUser(e.target.value)}
-              className="bg-transparent text-sm outline-none"
+          <button
+            data-testid="theme-toggle"
+            onClick={cycle}
+            title={`主题：${themeLabel}（点击切换）`}
+            className="rounded-md border border-border bg-card/50 p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ThemeIcon className="size-4" />
+          </button>
+
+          <Select value={userId ?? ''} onValueChange={(value) => switchUser(value)}>
+            <SelectTrigger
+              data-testid="user-select"
+              className="h-8 w-[132px] border-border bg-card/50 px-2 text-xs"
             >
+              <span className="flex items-center gap-1.5">
+                <Users className="size-3.5 shrink-0 text-muted-foreground" />
+                <SelectValue />
+              </span>
+            </SelectTrigger>
+            <SelectContent>
               {users.map((user) => (
-                <option key={user.id} value={user.id}>
+                <SelectItem key={user.id} value={user.id} className="text-xs">
                   {user.name}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-          </div>
+            </SelectContent>
+          </Select>
 
           <button
             onClick={() => setOpen((v) => !v)}

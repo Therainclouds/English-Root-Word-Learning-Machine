@@ -1,4 +1,6 @@
-import type { Morpheme, MorphemeExplain, MorphemeOrigin, MorphemeType } from '../types';
+import type { Morpheme, MorphemeExplain } from '../types';
+import { morph } from './morpheme-factory';
+import { EXTENDED_MORPHEMES } from './morphemes-extended';
 
 /**
  * 种子词素库（S-007）
@@ -12,39 +14,6 @@ import type { Morpheme, MorphemeExplain, MorphemeOrigin, MorphemeType } from '..
  * 首期 61 条：16 前缀 + 31 词根 + 14 后缀，覆盖 K1–K5 中可切分的常用词。
  * 扩到 300–800 条需走 ETL（Wiktionary 为 CC BY-SA、Etymonline 需单独确认），默认不启用。
  */
-
-function morph(
-  type: MorphemeType,
-  form: string,
-  allomorphs: string[],
-  origin: MorphemeOrigin,
-  etymon: string,
-  coreMeaning: string,
-  l1Gloss: string,
-  semanticField: string[],
-  productivity: number,
-  difficulty = 2,
-  confidence = 0.9,
-  confusingWith: string[] = [],
-): Morpheme {
-  return {
-    id: `m.${type}.${form}`,
-    type,
-    form,
-    allomorphs,
-    origin,
-    etymon,
-    coreMeaning,
-    l1Gloss,
-    semanticField,
-    productivity,
-    coverageGain: Number((productivity * 0.00007).toFixed(4)),
-    difficulty,
-    confusingWith,
-    confidence,
-    sources: ['seed'],
-  };
-}
 
 const RAW_MORPHEMES: Morpheme[] = [
   /* ---------------- 前缀 ---------------- */
@@ -242,8 +211,11 @@ const EXPLAIN_SEED: Record<string, MorphemeExplain> = {
   },
 };
 
-/** 合并标杆讲解后的种子词素（导入器与离线自检都读这个） */
-export const SEED_MORPHEMES: Morpheme[] = RAW_MORPHEMES.map((m) =>
+/**
+ * 全部种子词素 = 核心集（手写讲解标杆）+ 扩展集（morphemes-extended.ts）
+ * 导入器与离线自检都读这个。
+ */
+export const SEED_MORPHEMES: Morpheme[] = [...RAW_MORPHEMES, ...EXTENDED_MORPHEMES].map((m) =>
   EXPLAIN_SEED[m.id] ? { ...m, explain: EXPLAIN_SEED[m.id] } : m,
 );
 

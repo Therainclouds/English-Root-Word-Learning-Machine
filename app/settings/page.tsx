@@ -3,6 +3,16 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ListPlus, Scale, Server, Sparkles, Users } from 'lucide-react';
 import { useAppContext } from '@/components/app-provider';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { createProvider } from '@/lib/llm';
 import { decisionEndpoint } from '@/lib/llm/decision';
 import type { LlmProviderId, LlmUsageLog } from '@/lib/types';
@@ -149,31 +159,31 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">大模型接入</h2>
         </div>
 
-        <label className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
-          <span>启用大模型辅助</span>
-          <input
-            type="checkbox"
+        <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
+          <Label htmlFor="llm-enabled" className="text-sm text-foreground">
+            启用大模型辅助
+          </Label>
+          <Switch
+            id="llm-enabled"
+            data-testid="llm-enabled"
             checked={llm.enabled}
-            onChange={(e) => updateLlm({ enabled: e.target.checked })}
-            className="size-4 accent-primary"
+            onCheckedChange={(checked) => updateLlm({ enabled: checked })}
           />
-        </label>
+        </div>
 
         <Field label="接入预设">
-          <select
-            value={activePreset?.id ?? ''}
-            onChange={(e) => applyPreset(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-          >
-            <option value="" disabled>
-              选择一个预设（或手动填写下方字段）
-            </option>
-            {PRESETS.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
+          <Select value={activePreset?.id ?? ''} onValueChange={applyPreset}>
+            <SelectTrigger data-testid="llm-preset">
+              <SelectValue placeholder="选择一个预设（或手动填写下方字段）" />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESETS.map((preset) => (
+                <SelectItem key={preset.id} value={preset.id}>
+                  {preset.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="mt-1 text-xs text-muted-foreground">
             {activePreset?.hint ?? '选择预设后仍可手动修改任意字段'}
           </p>
@@ -209,14 +219,18 @@ export default function SettingsPage() {
         </Field>
 
         <Field label="鉴权方式">
-          <select
+          <Select
             value={llm.authHeader ?? 'bearer'}
-            onChange={(e) => updateLlm({ authHeader: e.target.value as 'bearer' | 'x-api-key' })}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            onValueChange={(value) => updateLlm({ authHeader: value as 'bearer' | 'x-api-key' })}
           >
-            <option value="bearer">Authorization: Bearer（多数国内兼容端点）</option>
-            <option value="x-api-key">x-api-key（Anthropic 官方）</option>
-          </select>
+            <SelectTrigger data-testid="llm-auth-header">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bearer">Authorization: Bearer（多数国内兼容端点）</SelectItem>
+              <SelectItem value="x-api-key">x-api-key（Anthropic 官方）</SelectItem>
+            </SelectContent>
+          </Select>
         </Field>
 
         <Field label="API Key">
@@ -558,15 +572,17 @@ export default function SettingsPage() {
           是否用对了义项，不合格的句子直接丢弃。释义与例句的生成仍由上面的大模型负责。
         </p>
 
-        <label className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
-          <span>启用例句质量校验</span>
-          <input
-            type="checkbox"
+        <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
+          <Label htmlFor="decision-enabled" className="text-sm text-foreground">
+            启用例句质量校验
+          </Label>
+          <Switch
+            id="decision-enabled"
+            data-testid="decision-enabled"
             checked={decision.enabled}
-            onChange={(e) => updateDecision({ enabled: e.target.checked })}
-            className="size-4 accent-primary"
+            onCheckedChange={(checked) => updateDecision({ enabled: checked })}
           />
-        </label>
+        </div>
 
         <Field label="WorkspaceId（业务空间 ID）">
           <input
@@ -592,14 +608,20 @@ export default function SettingsPage() {
         </Field>
 
         <Field label="地域">
-          <select
+          <Select
             value={decision.region}
-            onChange={(e) => updateDecision({ region: e.target.value as 'cn-beijing' | 'ap-southeast-1' })}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            onValueChange={(value) =>
+              updateDecision({ region: value as 'cn-beijing' | 'ap-southeast-1' })
+            }
           >
-            <option value="cn-beijing">华北2（北京）</option>
-            <option value="ap-southeast-1">新加坡</option>
-          </select>
+            <SelectTrigger data-testid="decision-region">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cn-beijing">华北2（北京）</SelectItem>
+              <SelectItem value="ap-southeast-1">新加坡</SelectItem>
+            </SelectContent>
+          </Select>
         </Field>
 
         <Field label="API Key">
@@ -613,13 +635,13 @@ export default function SettingsPage() {
         </Field>
 
         <Field label={`自然度阈值：${decision.naturalThreshold.toFixed(2)}（低于此值的例句丢弃）`}>
-          <input
-            type="range"
+          <Slider
+            data-testid="natural-threshold"
             min={30}
             max={90}
-            value={Math.round(decision.naturalThreshold * 100)}
-            onChange={(e) => updateDecision({ naturalThreshold: Number(e.target.value) / 100 })}
-            className="w-full accent-primary"
+            step={1}
+            value={[Math.round(decision.naturalThreshold * 100)]}
+            onValueChange={([value]) => updateDecision({ naturalThreshold: value / 100 })}
           />
         </Field>
 
@@ -646,15 +668,15 @@ export default function SettingsPage() {
         </p>
 
         <Field label={`每日新词上限：${settings.learning.dailyNewLimit}`}>
-          <input
-            type="range"
+          <Slider
+            data-testid="daily-new-limit"
             min={5}
             max={40}
-            value={settings.learning.dailyNewLimit}
-            onChange={(e) =>
-              update({ learning: { ...settings.learning, dailyNewLimit: Number(e.target.value) } })
+            step={1}
+            value={[settings.learning.dailyNewLimit]}
+            onValueChange={([value]) =>
+              update({ learning: { ...settings.learning, dailyNewLimit: value } })
             }
-            className="w-full accent-primary"
           />
           <p className="mt-1 text-xs text-muted-foreground">
             可持续速率约 10–20；超出会产生不可承受的复习债。
@@ -662,31 +684,31 @@ export default function SettingsPage() {
         </Field>
 
         <Field label={`目标保持率：${Math.round(settings.learning.retentionTarget * 100)}%`}>
-          <input
-            type="range"
+          <Slider
+            data-testid="retention-target"
             min={80}
             max={95}
-            value={Math.round(settings.learning.retentionTarget * 100)}
-            onChange={(e) =>
-              update({
-                learning: { ...settings.learning, retentionTarget: Number(e.target.value) / 100 },
-              })
+            step={1}
+            value={[Math.round(settings.learning.retentionTarget * 100)]}
+            onValueChange={([value]) =>
+              update({ learning: { ...settings.learning, retentionTarget: value / 100 } })
             }
-            className="w-full accent-primary"
           />
         </Field>
 
-        <label className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
-          <span>显示中文释义</span>
-          <input
-            type="checkbox"
+        <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
+          <Label htmlFor="show-l1" className="text-sm text-foreground">
+            显示中文释义
+          </Label>
+          <Switch
+            id="show-l1"
+            data-testid="show-l1"
             checked={settings.learning.showL1}
-            onChange={(e) =>
-              update({ learning: { ...settings.learning, showL1: e.target.checked } })
+            onCheckedChange={(checked) =>
+              update({ learning: { ...settings.learning, showL1: checked } })
             }
-            className="size-4 accent-primary"
           />
-        </label>
+        </div>
       </section>
 
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card/40 p-5">

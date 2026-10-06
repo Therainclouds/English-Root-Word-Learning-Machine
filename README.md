@@ -77,7 +77,9 @@ LLM 未启用时给出提示且不报错；生成失败保持 `pending`，可重
 
 ```
 app/          页面：路径 / 学习 / 词库 / 设置
-components/   Canvas 路径可视化、导航
+components/   Canvas 路径可视化、导航、主题 Provider
+components/ui/      shadcn + Radix 控件（slider / switch / select / label）
+lib/quiz.ts   客观出题器（四选一干扰项 + 输入题答案集）
 lib/
   srs.ts      SM-2 排程（可替换 FSRS）
   coverage.ts 覆盖率估算（Nation 分频段经验值）
@@ -162,6 +164,14 @@ npm run dev
 > 阅读素材应优先选**用词受控**的分级读物（VOA Learning English、Breaking News English 等），
 > 真要引入外部文章，先算生词率、只保留落在 2%–5% 的那批。
 
+## 主题与组件（D13）
+
+- **主题**：浅色 / 深色 / 跟随系统，导航栏右侧图标点击轮换，选择存 `localStorage`（`elm.theme`）。
+  首帧前由 `app/layout.tsx` 的内联脚本挂 `.dark` class，刷新不闪屏。
+  CSS 变量两套写在 `app/globals.css`（`:root` 浅色、`.dark` 深色），改配色只改这两处。
+- **控件**：交互组件统一用 **shadcn + Radix**（`components/ui/`：`slider` / `switch` / `select` / `label`），
+  不再手写原生 `input[type=range]`、`select`。滑块支持键盘方向键与触屏拖动。
+
 ## 学习页：客观作答（D12）
 
 **每张卡都必须在页面上给出答案，由系统客观判定，没有自评环节。**
@@ -183,7 +193,8 @@ npm run dev
 LLM 只补助记与字面义润色，结果写回共享词库。
 
 1. **设置页 → 词根库导入 → 「导入词根库并切分词库」**
-   写入 63 个种子词素，按规则切分共享词库。实测 3000 词切出 90 个（约 3%），
+   写入 **226 个种子词素**（45 前缀 + 150 词根 + 31 后缀），按规则切分共享词库。
+   实测 3000 词切出 220 个（约 8%），
    生成两类卡片：**词 → 词素切分**（识别方向）与 **词根 → 派生词**（产出方向），
    并挂到阶段 3 的「词根词缀系统」节点。重复导入不产生重复卡片，不改动任何人的复习进度。
 2. **词库页 → 「词根」标签页**：按派生力（`productivity`）排序，

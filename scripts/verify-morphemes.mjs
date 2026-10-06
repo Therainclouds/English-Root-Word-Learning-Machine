@@ -28,16 +28,21 @@ const EXPECT_SEGMENTED = [
   'conserve', 'conversation', 'review', 'concept', 'except',
 ];
 
-/** 期望切不出来的词（防误切回归：日常高频本族词与噪声） */
+/**
+ * 期望切不出来的词（防误切回归）
+ *
+ * 注意：词素库扩充后，一些原先"切不出"的词变得**可以正确切分**了，
+ * 例如 president = pre + sid + ent（"坐在前面的人"）、insect = in + sect（"切成两段"）、
+ * accept = ac + cept、perform = per + form —— 这些应当移出本列表，而不是当成误切。
+ * 这里只保留真正不可切分的日常本族词与外来借词。
+ */
 const EXPECT_UNSEGMENTED = [
   'interest', 'internal', 'instance', 'public', 'problem', 'member', 'number',
   'order', 'water', 'never', 'under', 'enter', 'center', 'after', 'letter',
   'better', 'matter', 'consider', 'remember', 'together', 'another', 'either',
-  'children', 'universe', 'evidence', 'audience', 'service', 'event', 'port',
-  'form', 'credit', 'visit', 'video', 'capture', 'accept', 'maintain',
-  'difficult', 'manage', 'manual', 'generate', 'general', 'president',
-  'resident', 'incident', 'insect', 'insert', 'concert', 'uniform', 'perform',
-  'permit', 'admit', 'insect',
+  'children', 'universe', 'evidence', 'service', 'event', 'port', 'form',
+  'credit', 'visit', 'video', 'maintain', 'difficult', 'manual', 'general',
+  'insert', 'concert', 'uniform',
 ];
 
 const results = [];
@@ -98,10 +103,15 @@ try {
       !(m.confidence >= 0 && m.confidence <= 1) ||
       !(m.productivity > 0),
   );
+  const byType = SEED_MORPHEMES.reduce((acc, m) => {
+    acc[m.type] = (acc[m.type] ?? 0) + 1;
+    return acc;
+  }, {});
   check(
     'AC-1 种子数据完整性',
     SEED_MORPHEMES.length >= 60 && dupIds.length === 0 && badShape.length === 0,
-    `${SEED_MORPHEMES.length} 条；重复 id ${dupIds.length}；结构异常 ${badShape.length}`,
+    `${SEED_MORPHEMES.length} 条（前缀 ${byType.prefix ?? 0} · 词根 ${byType.root ?? 0} · 后缀 ${byType.suffix ?? 0}）；` +
+      `重复 id ${dupIds.length}；结构异常 ${badShape.length}`,
   );
 
   /* AC-2 引用完整性 + AC-3 切分可复原 + AC-4 字面义非空 */

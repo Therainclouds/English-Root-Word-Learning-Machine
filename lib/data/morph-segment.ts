@@ -63,8 +63,11 @@ export function buildMorphemeIndex(morphemes: Morpheme[]): MorphemeIndex {
 /** stem 与词根异形的差异；无法匹配返回 null */
 function matchGap(stem: string, allomorph: string): number | null {
   if (stem === allomorph) return 0;
+  // 词干比词根长（连接元音 / 屈折尾）：possible → poss vs pos
   if (stem.startsWith(allomorph)) return stem.length - allomorph.length;
-  if (allomorph.startsWith(stem)) return allomorph.length - stem.length;
+  // 词干比词根短（词根脱落）：仅当词干够长才接受。
+  // 否则 3 字母词干会误配 4 字母词根：enter → en + terr、after → af + terr。
+  if (stem.length >= 4 && allomorph.startsWith(stem)) return allomorph.length - stem.length;
   return null;
 }
 
