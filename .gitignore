@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.next-build/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.env*.local
+proxy/.env
+public/wordlists/
+
+# 本地构建残留 / 运行日志 / IDE 数据
+*.old/
+dev.log
+.codebuddy/
