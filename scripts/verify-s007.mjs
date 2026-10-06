@@ -115,6 +115,8 @@ const SNAPSHOT = `(async () => {
   return JSON.stringify({
     userId: uid,
     morphemes: morphemes.length,
+    explainCount: morphemes.filter(m => m.explain).length,
+    mnemonicCount: morphemes.filter(m => m.mnemonic && m.mnemonic.story).length,
     cardsTotal: cards.length,
     byTemplate,
     groups,
@@ -124,19 +126,63 @@ const SNAPSHOT = `(async () => {
   });
 })()`;
 
+/** 注入一条"LLM 已生成"的讲解与助记，用于验证重新导入不会把成果覆盖掉（AC-14） */
+const INJECT_EXPLAIN = `(async () => {
+  const openDb = (name) => new Promise((res, rej) => {
+    const r = indexedDB.open(name);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const db = await openDb('elm-shared');
+  const rows = await new Promise(res => {
+    const r = db.transaction('morphemes').objectStore('morphemes').getAll();
+    r.onsuccess = () => res(r.result);
+  });
+  const target = rows.find(m => !m.explain);
+  if (!target) { db.close(); return 'NO_TARGET'; }
+  target.explain = { etymology: 'AC-14 注入：模拟 LLM 生成的词源讲解，重新导入后必须保留。' };
+  target.mnemonic = { story: 'AC-14 注入助记' };
+  await new Promise(res => {
+    const tx = db.transaction('morphemes', 'readwrite');
+    tx.objectStore('morphemes').put(target);
+    tx.oncomplete = () => res();
+  });
+  db.close();
+  return target.id;
+})()`;
+
+/**
+ * 前置：在真实界面上完成一次作答，产生用户复习状态。
+ * 注意：D12 改为客观作答后，界面不再是「reveal → 自评分数」，
+ * 而是「选择项 / 输入框 → 提交 → 判定 → 下一张」，因此这里按当前 testid 操作。
+ */
 const GRADE_ONE = `(async () => {
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   for (let i = 0; i < 60; i++) {
-    if (document.querySelector('[data-testid=reveal-btn]')) break;
+    if (document.querySelector('[data-testid=choice-0]') || document.querySelector('[data-testid=answer-input]')) break;
     await wait(250);
   }
-  const reveal = document.querySelector('[data-testid=reveal-btn]');
-  if (!reveal) return 'NO_CARD';
-  reveal.click();
-  await wait(400);
-  const grade = document.querySelector('[data-testid=grade-4]');
-  if (!grade) return 'NO_GRADE_BTN';
-  grade.click();
+  const choice = document.querySelector('[data-testid=choice-0]');
+  if (choice) {
+    choice.click();
+  } else {
+    const input = document.querySelector('[data-testid=answer-input]');
+    if (!input) return 'NO_CARD';
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, 'zzz-not-correct');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await wait(250);
+    const submit = document.querySelector('[data-testid=submit-answer]');
+    if (!submit) return 'NO_SUBMIT_BTN';
+    submit.click();
+  }
+  for (let i = 0; i < 30; i++) {
+    if (document.querySelector('[data-testid=answer-verdict]')) break;
+    await wait(200);
+  }
+  const next = document.querySelector('[data-testid=next-card]');
+  if (!next) return 'NO_NEXT_BTN';
+  next.click();
   await wait(700);
   return 'GRADED';
 })()`;
@@ -259,9 +305,19 @@ record(
   widest ? `${widest[0]} → 组 ${widest[1].join('/')}` : '无',
 );
 
-// 3. 幂等：再导入一次
+// 3. 幂等：再导入一次（并验证 LLM 成果不被种子覆盖）
+const injected = await settings.evaluate(INJECT_EXPLAIN);
+const injectedBefore = JSON.parse(await settings.evaluate(SNAPSHOT));
 const second = await settings.evaluate(RUN_IMPORT);
 const after2 = JSON.parse(await settings.evaluate(SNAPSHOT));
+record(
+  'AC-14 重新导入保留 LLM 讲解/助记',
+  injected !== 'NO_TARGET' &&
+    after2.explainCount === injectedBefore.explainCount &&
+    after2.mnemonicCount === injectedBefore.mnemonicCount,
+  `注入 ${injected}；讲解 ${injectedBefore.explainCount} → ${after2.explainCount}，` +
+    `助记 ${injectedBefore.mnemonicCount} → ${after2.mnemonicCount}`,
+);
 record('AC-7 重复导入幂等（卡片总数）', after2.cardsTotal === after.cardsTotal, `${after.cardsTotal} → ${after2.cardsTotal}`);
 record('AC-7 重复导入幂等（词素数）', after2.morphemes === after.morphemes, `${after.morphemes} → ${after2.morphemes}`);
 record(

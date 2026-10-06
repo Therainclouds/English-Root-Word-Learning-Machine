@@ -76,6 +76,25 @@ function isPlaceholder(text: string) {
   return !text || text.includes('待生成') || text.includes('SPEC');
 }
 
+/**
+ * 两个释义是否高度相似（归一化后互相包含）。
+ * 只排除"完全相等"是不够的：库里同时存在「大约」和「关于；大约」时，
+ * 两个选项在语义上都成立，学习者选了另一个同样正确的项却被判错。
+ */
+function tooSimilar(a: string, b: string) {
+  const norm = (s: string) => s.replace(/[\s；;、,，.。·\-—~()（）]/g, '');
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return false;
+  return x.includes(y) || y.includes(x);
+}
+
+/** 挑干扰项：优先用"与正确答案不相似"的候选；若过滤后不足 3 个，回退到全部候选以保证出题能力 */
+function pickDistractors(pool: string[], correct: string, cardId: string) {
+  const safe = pool.filter((t) => !tooSimilar(t, correct));
+  return sample(safe.length >= 3 ? safe : pool, 3, hash(cardId));
+}
+
 /** 词 → 中文意思：四选一。干扰项取自词库里其他词的释义 */
 function choiceFromMeanings(card: Card, correct: string, words: Word[]): Quiz | null {
   if (isPlaceholder(correct)) return null;
@@ -86,7 +105,7 @@ function choiceFromMeanings(card: Card, correct: string, words: Word[]): Quiz | 
         .filter((t) => t && t !== correct && !isPlaceholder(t)),
     ),
   );
-  const distractors = sample(pool, 3, hash(card.id));
+  const distractors = pickDistractors(pool, correct, card.id);
   if (distractors.length === 0) return null;
   return {
     kind: 'choice',
@@ -147,8 +166,12 @@ export function buildQuiz(card: Card, word: Word | undefined, words: Word[]): Qu
     return {
       kind: 'input',
       instruction: INSTRUCTION[card.template] ?? '写出答案',
+      // 全量答案参与判定；展示时只列前 8 个，避免长答案撑满屏幕
       answers,
-      display: answers.join(' / '),
+      display:
+        answers.length > 8
+          ? `${answers.slice(0, 8).join(' / ')} 等 ${answers.length} 个`
+          : answers.join(' / '),
     };
   }
 

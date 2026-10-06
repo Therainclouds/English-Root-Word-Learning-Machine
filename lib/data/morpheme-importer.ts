@@ -25,11 +25,30 @@ export interface MorphemeImportResult {
   unsegmented: number;
   cardsAdded: number;
   nodeFamilies: number;
+  /** 被保留的已有讲解 / 助记条数（重新导入不会抹掉 LLM 成果） */
+  preserved: number;
   durationMs: number;
 }
 
 function refsText(refs: MorphemeRef[]) {
   return refs.map((r) => r.allomorph).join(' + ');
+}
+
+/**
+ * 种子是**基线**而不是权威。
+ *
+ * 重新导入时如果直接 put 种子，会把 LLM 已生成（或手写补充）的 `explain` / `mnemonic`
+ * 抹成空值——用户点过"批量补全词根讲解"后再导一次就全白烧了。
+ * 规则：种子里有的以种子为准（便于种子迭代升级内容），种子为空的沿用库中已有值。
+ */
+function mergeMorpheme(seed: Morpheme, existing: Morpheme | undefined): Morpheme {
+  if (!existing) return seed;
+  const merged: Morpheme = { ...seed };
+  if (!merged.mnemonic?.story?.trim() && existing.mnemonic?.story?.trim()) {
+    merged.mnemonic = existing.mnemonic;
+  }
+  if (!merged.explain && existing.explain) merged.explain = existing.explain;
+  return merged;
 }
 
 export async function importMorphemes(custom?: Morpheme[]): Promise<MorphemeImportResult> {
@@ -42,6 +61,9 @@ export async function importMorphemes(custom?: Morpheme[]): Promise<MorphemeImpo
   const existingCards = (await db.getAll('cards')) as Card[];
   const nodes = (await db.getAll('pathNodes')) as { id: string; targetFamilyIds?: string[] }[];
   const existingCardIds = new Set(existingCards.map((c) => c.id));
+  const existingById = new Map(
+    ((await db.getAll('morphemes')) as Morpheme[]).map((m) => [m.id, m]),
+  );
 
   /* 1. 切分所有词
    * 切分结果一律以**本次计算**为准：库里的 decomposition / literalGlue 是上一次导入的旧值，
@@ -130,15 +152,23 @@ export async function importMorphemes(custom?: Morpheme[]): Promise<MorphemeImpo
       template: 'morpheme_to_words',
       direction: 'productive',
       front: `${morpheme.form} — ${morpheme.coreMeaning}`,
-      back: words.slice(0, 8).join(', '),
+      // 全量派生词：判定时用完整答案集，展示时再截断（截断在这里会导致"写出第 9 个也判错"）
+      back: words.join(', '),
       hint: morpheme.l1Gloss,
       interleaveGroup: (i + 3) % 7,
     });
   });
 
-  /* 4. 写入共享库（分批事务，不触碰任何用户库） */
+  /* 4. 写入共享库（分批事务，不触碰任何用户库）
+   * merge：保留库中已有的 explain / mnemonic，避免重复导入抹掉 LLM 生成的内容 */
+  const merged = morphemes.map((m) => mergeMorpheme(m, existingById.get(m.id)));
+  const preserved = merged.filter(
+    (m, i) =>
+      m.explain !== morphemes[i].explain || m.mnemonic !== morphemes[i].mnemonic,
+  ).length;
+
   const morphemeTx = db.transaction('morphemes', 'readwrite');
-  for (const row of morphemes) morphemeTx.store.put(row);
+  for (const row of merged) morphemeTx.store.put(row);
   await morphemeTx.done;
 
   if (updatedWords.length) {
@@ -170,6 +200,7 @@ export async function importMorphemes(custom?: Morpheme[]): Promise<MorphemeImpo
     unsegmented,
     cardsAdded: cards.length,
     nodeFamilies: familyIds.length,
+    preserved,
     durationMs: Date.now() - startedAt,
   };
 }

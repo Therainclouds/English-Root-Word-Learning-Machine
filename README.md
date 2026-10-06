@@ -58,8 +58,8 @@ node scripts/fetch-wordlist.mjs 3000    # → public/wordlists/top-10000.txt
 | `node scripts/verify-s002.mjs` | 释义按需生成验收（13 项） |
 | `node scripts/verify-s005.mjs` | LLM 重试/缓存/用量验收（16 项） |
 | `node scripts/verify-legacy-word.mjs` | 旧数据不被覆盖回归（6 项） |
-| `node scripts/verify-morphemes.mjs` | 词根数据离线自检（7 项，纯 node 无需浏览器） |
-| `node scripts/verify-s007.mjs` | 词根模块运行时验收（8 项） |
+| `node scripts/verify-morphemes.mjs` | 词根数据离线自检（12 项，纯 node 无需浏览器） |
+| `node scripts/verify-s007.mjs` | 词根模块运行时验收（16 项） |
 
 验收脚本前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
 
@@ -86,8 +86,8 @@ lib/
   path.ts     节点状态机
   llm/        可插拔适配器：OpenAI 兼容 / Anthropic / Ollama（morpheme.ts 为词根助记）
   data/       种子词表与路径定义
-  data/morphemes.ts       63 个种子词素（S-007）
-  data/morph-segment.ts   确定性形态切分 + 补全判定（纯函数）
+  data/morphemes.ts       338 个种子词素（S-007，前缀 50 · 词根 252 · 后缀 36）
+  data/morph-segment.ts   确定性形态切分 + 误切黑名单 + 补全判定（纯函数）
   data/morpheme-importer.ts 词根库导入与卡片生成
   use-app.ts  全局状态（IndexedDB → React）
 ```
@@ -194,18 +194,22 @@ LLM 只补助记与字面义润色，结果写回共享词库。
 
 1. **设置页 → 词根库导入 → 「导入词根库并切分词库」**
    写入 **338 个种子词素**（50 前缀 + 252 词根 + 36 后缀），按规则切分共享词库。
-   实测 3000 词切出 278 个（约 11%），
+   实测 3000 词切出 257 个（约 9%），
    生成两类卡片：**词 → 词素切分**（识别方向）与 **词根 → 派生词**（产出方向），
-   并挂到阶段 3 的「词根词缀系统」节点。重复导入不产生重复卡片，不改动任何人的复习进度。
+   并挂到阶段 3 的「词根词缀系统」节点。重复导入不产生重复卡片，不改动任何人的复习进度；
+   已经生成过的词根讲解 / 助记**不会被种子覆盖**（种子是基线，不是权威）。
 2. **词库页 → 「词根」标签页**：按派生力（`productivity`）排序，
    点词素看异形、派生词与助记，点派生词可跳回词族详情。
 3. **可选（需启用大模型）**：「批量补全词根助记」生成中文助记与同源词；
    「润色字面义」把 `[in] into, in + [spect] to look, see` 改成 `to look into`。
+4. **词根卡有独立每日预算**（D11）：默认每天 5 张新词根卡，不占用阶段 1 的每日新词额度，
+   避免词根卡把高频词的复习冲垮。
 
-切分策略是**宁缺勿错**：拼不回原词就标 `unsegmented`，不给似是而非的拆解。
+切分策略是**宁缺勿错**：拼不回原词就标 `unsegmented`；
+形态合规但词源无关的词（`person`、`recent`、`often` 等）进 `NON_SEGMENTABLE` 黑名单，不给似是而非的拆解。
 
 数据模型见 `docs/root-data-schema.md`，验收记录见 `specs/007-morpheme-module.md`
-（离线 8/8、运行时 15/15）。
+（离线 12/12、运行时 16/16）。
 
 ## 三阶段路径
 

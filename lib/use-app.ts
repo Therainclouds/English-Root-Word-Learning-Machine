@@ -22,7 +22,7 @@ import {
 } from './db';
 import { ensurePassagesSeeded, ensureSeeded } from './data/seed';
 import { setLlmUser } from './llm/telemetry';
-import { buildSession, createInitialState, schedule } from './srs';
+import { buildSession, createInitialState, isMorphemeCard, schedule } from './srs';
 import { computeKnownFamilies, computeRuntime } from './path';
 import { estimateCoverage } from './coverage';
 import { todayKey } from './utils';
@@ -151,15 +151,30 @@ export function useApp() {
     return logs.filter((l) => todayKey(new Date(l.reviewedAt)) === key).length;
   }, [logs]);
 
+  /**
+   * 今日词根卡的学习条数（D11）。
+   * 必须与阶段 1 分开计量：否则答 10 张词根卡会被算成"学了 5 个新词"，
+   * 直接吃掉阶段 1 的 dailyNewLimit——正是 D11 要避免的挤兑。
+   */
+  const morphLearnedToday = useMemo(() => {
+    const key = todayKey();
+    const morphCardIds = new Set(cards.filter(isMorphemeCard).map((c) => c.id));
+    return logs.filter(
+      (l) => todayKey(new Date(l.reviewedAt)) === key && morphCardIds.has(l.cardId),
+    ).length;
+  }, [logs, cards]);
+
   const session = useMemo(
     () =>
       buildSession({
         cards,
         states: stateMap,
         newLimit: learning.dailyNewLimit,
-        learnedToday: learnedToday / 2,
+        // 阶段 1 的新卡数 = 今日非词根卡条数 / 2（每词收发各一张卡）
+        learnedToday: (learnedToday - morphLearnedToday) / 2,
+        morphLearnedToday,
       }),
-    [cards, stateMap, learning.dailyNewLimit, learnedToday],
+    [cards, stateMap, learning.dailyNewLimit, learnedToday, morphLearnedToday],
   );
 
   const grade = useCallback(

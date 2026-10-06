@@ -56,13 +56,21 @@ export function schedule(state: ReviewState, grade: number, now = Date.now()): R
 }
 
 function updateEase(ease: number, grade: number) {
-  const next = ease + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
+  // 客观判定只有"对 / 错"两档（D12）。若按 SM-2 原始公式把答错当作 q=0，
+  // 一次失误就扣 0.8 的 ease（2.5 → 1.7，两次触底 1.3），此后即便一路答对，
+  // 间隔按 ef 缩放也几乎不再增长 —— 两次手滑等于这个词永久报废。
+  // 这里把答对映射为 q=4（ease 不变）、答错映射为 q=2（−0.32），方向不变但留出恢复空间；
+  // grade 5 仍按 q=5 处理，供将来恢复难度自评时使用。
+  const q = grade >= 5 ? 5 : grade >= 3 ? 4 : 2;
+  const next = ease + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   return clamp(Number(next.toFixed(3)), 1.3, 3.2);
 }
 
 function computeStability(reps: number, lapses: number, grade: number) {
   const base = reps === 0 ? 0 : 1 - 1 / (1 + reps);
-  const penalty = Math.max(0, 1 - lapses * 0.12);
+  // 失误惩罚：0.12/次会让"错过一次"的词族需要连续答对约 10 次才够到
+  // path.ts 的掌握线（stability ≥ 0.8），体感是永远解锁不了。降为 0.06/次后约 6 次。
+  const penalty = Math.max(0, 1 - lapses * 0.06);
   const recency = grade < 3 ? 0.4 : grade === 3 ? 0.75 : 1;
   return clamp(base * penalty * recency, 0, 1);
 }
@@ -100,8 +108,24 @@ export interface SessionInput {
   states: Map<string, ReviewState>;
   newLimit: number;
   learnedToday: number;
+  /** 词根卡独立每日新卡预算（D11） */
+  morphNewLimit?: number;
+  /** 今日已学的词根卡数量 */
+  morphLearnedToday?: number;
   now?: number;
 }
+
+/** 词根卡（S-007）：与阶段 1 高频词卡分开计量，避免挤占复习预算（D11） */
+export function isMorphemeCard(card: Card) {
+  return card.template === 'word_to_morpheme' || card.template === 'morpheme_to_words';
+}
+
+/**
+ * 词根卡的独立每日新卡预算（D11）。
+ * 默认 5：词根卡单卡信息量大（一次要读词源、异形、派生词），
+ * 且切分词已达 257 个（约 500 张卡），不设上限会瞬间淹没阶段 1 的高频词。
+ */
+export const MORPH_DAILY_NEW_LIMIT = 5;
 
 /**
  * 新卡按「识别 → 产出」交替排列。
@@ -121,24 +145,43 @@ function alternateDirections(list: Card[]): Card[] {
 }
 
 /** 组一场学习：到期卡优先（按逾期程度），再补新卡（受每日上限约束），整体交错 */
-export function buildSession({ cards, states, newLimit, learnedToday, now = Date.now() }: SessionInput) {
+export function buildSession({
+  cards,
+  states,
+  newLimit,
+  learnedToday,
+  morphNewLimit = MORPH_DAILY_NEW_LIMIT,
+  morphLearnedToday = 0,
+  now = Date.now(),
+}: SessionInput) {
   const due: Card[] = [];
   const fresh: Card[] = [];
+  const freshMorph: Card[] = [];
 
   for (const card of cards) {
     const state = states.get(card.id);
-    if (!state) fresh.push(card);
-    else if (state.dueAt <= now) due.push(card);
+    if (!state) {
+      // 新卡按来源分池：词根卡不占阶段 1 的额度（D11）
+      if (isMorphemeCard(card)) freshMorph.push(card);
+      else fresh.push(card);
+    } else if (state.dueAt <= now) {
+      due.push(card);
+    }
   }
 
   due.sort((a, b) => (states.get(a.id)!.dueAt ?? 0) - (states.get(b.id)!.dueAt ?? 0));
 
   const remainingNew = Math.max(0, newLimit - learnedToday);
-  const newCards = alternateDirections(fresh).slice(0, remainingNew);
+  const remainingMorph = Math.max(0, morphNewLimit - morphLearnedToday);
+  const stage1New = alternateDirections(fresh).slice(0, remainingNew);
+  const morphNew = alternateDirections(freshMorph).slice(0, remainingMorph);
+  const newCards = [...stage1New, ...morphNew];
 
   return {
     queue: [...interleave(due, (c) => c.interleaveGroup), ...interleave(newCards, (c) => c.interleaveGroup)],
     dueCount: due.length,
     newCount: newCards.length,
+    morphNewCount: morphNew.length,
+    morphDueCount: due.filter(isMorphemeCard).length,
   };
 }

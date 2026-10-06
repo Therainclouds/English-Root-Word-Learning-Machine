@@ -30,7 +30,7 @@
 | S-004 | [学习负担评分（决策模型）](./004-learning-burden.md) | planned | D5 |
 | S-005 | [LLM 调用健壮性](./005-llm-robustness.md) | **done**（16/16 验收通过） | — |
 | S-006 | 多设备同步（需要后端） | **暂缓** | D1 |
-| S-007 | [词根词缀模块（阶段 3 选修）](./007-morpheme-module.md) | **done**（离线 8/8 + 运行时 15/15） | D2 D4 D6 D8 D10 D11、S-001、S-005 |
+| S-007 | [词根词缀模块（阶段 3 选修）](./007-morpheme-module.md) | **done**（离线 12/12 + 运行时 16/16） | D2 D4 D6 D8 D10 D11、S-001、S-005 |
 
 ## 验收脚本
 
@@ -43,8 +43,8 @@
 | `scripts/verify-s003.mjs` | 生词率 / 着色 / 加入学习 / 用户隔离 |
 | `scripts/verify-s005.mjs` | 重试 / 缓存 / 不重试 / 用量记录（配 `scripts/mock-llm.mjs`） |
 | `scripts/verify-legacy-word.mjs` | 无 `definitionStatus` 的旧数据不被覆盖 |
-| `scripts/verify-morphemes.mjs` | 词根数据离线自检（7 项）：id 唯一 / 引用完整 / 切分可复原 / 易混指向存在 / 正例切出率 / 噪声零误切 |
-| `scripts/verify-s007.mjs` | 词根导入幂等、阶段 1 路径不受影响、交错分组、LLM 未启用可降级（15 项） |
+| `scripts/verify-morphemes.mjs` | 词根数据离线自检（12 项）：数据完整 / 引用完整 / 切分可复原 / 正例切出率 / 噪声零误切 / 误切黑名单 / 词根卡独立预算（D11）/ 判定不误伤正确答案 |
+| `scripts/verify-s007.mjs` | 词根导入幂等、阶段 1 路径不受影响、交错分组、重新导入保留 LLM 讲解（16 项） |
 
 前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
 

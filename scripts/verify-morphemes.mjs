@@ -54,7 +54,8 @@ function check(name, ok, detail) {
 
 function compile() {
   if (!existsSync(tscBin)) throw new Error(`未找到 typescript：${tscBin}`);
-  const out = mkdtempSync(join(tmpdir(), 'elm-morph-'));
+  // 输出到项目内临时目录：lib/utils.ts 依赖 clsx，放在系统临时目录会解析不到 node_modules
+  const out = mkdtempSync(join(root, '.verify-tmp-'));
   const res = spawnSync(
     process.execPath,
     [
@@ -62,6 +63,9 @@ function compile() {
       'lib/types.ts',
       'lib/data/morphemes.ts',
       'lib/data/morph-segment.ts',
+      'lib/utils.ts',
+      'lib/srs.ts',
+      'lib/quiz.ts',
       '--outDir', out,
       '--rootDir', '.',
       '--module', 'commonjs',
@@ -192,6 +196,85 @@ try {
     `${withExplain.length} 条讲解；长度异常 ${badEtymology.length}；派生词格式异常 ${badDerivatives.length}` +
       (badDerivatives.length ? ` → ${badDerivatives.slice(0, 3).join(', ')}` : '') +
       (tooShortExplain.length ? `；疑似缺句读 ${tooShortExplain.length}` : ''),
+  );
+
+  /* AC-10 误切黑名单生效（防回归：名单里的词一律不得被切分） */
+  const { NON_SEGMENTABLE } = require(join(outDir, 'lib/data/morph-segment.js'));
+  const blackHits = [...NON_SEGMENTABLE].filter((w) => segmentWord(w, index).status === 'segmented');
+  check(
+    'AC-10 误切黑名单生效',
+    NON_SEGMENTABLE.size >= 10 && blackHits.length === 0,
+    `${NON_SEGMENTABLE.size} 个受保护词；仍被切分 ${blackHits.length}` +
+      (blackHits.length ? ` → ${blackHits.join(', ')}` : ''),
+  );
+
+  /* AC-11 词根卡独立预算（D11）：两边互不挤占 */
+  const { buildSession, isMorphemeCard, MORPH_DAILY_NEW_LIMIT } = require(join(outDir, 'lib/srs.js'));
+
+  const stage1Cards = ['alpha', 'beta'].map((k) => ({
+    id: `w.${k}:rec`, familyId: 'f1', wordId: `w.${k}`, template: 'word_to_meaning',
+    direction: 'receptive', front: k, back: k, interleaveGroup: 0,
+  }));
+  const morphCards = [
+    { id: 'w.inspect:morph', template: 'word_to_morpheme', direction: 'receptive' },
+    { id: 'm.root.spect:prod', template: 'morpheme_to_words', direction: 'productive' },
+  ].map((c) => ({ ...c, familyId: '', wordId: '', front: c.id, back: c.id, interleaveGroup: 1 }));
+  const sessionCards = [...stage1Cards, ...morphCards];
+  const none = new Map();
+
+  // 阶段 1 额度用尽 → 不应再派普通新卡，但词根卡仍按自己的预算派
+  const s1Full = buildSession({ cards: sessionCards, states: none, newLimit: 2, learnedToday: 2, morphLearnedToday: 0 });
+  // 词根额度用尽 → 不应再派词根卡，普通卡不受影响
+  const morphFull = buildSession({
+    cards: sessionCards, states: none, newLimit: 2, learnedToday: 0,
+    morphLearnedToday: MORPH_DAILY_NEW_LIMIT,
+  });
+  const bothFree = buildSession({ cards: sessionCards, states: none, newLimit: 2, learnedToday: 0, morphLearnedToday: 0 });
+
+  const budgetOk =
+    isMorphemeCard(morphCards[0]) === true &&
+    isMorphemeCard(stage1Cards[0]) === false &&
+    s1Full.queue.length === 2 && s1Full.queue.every((c) => isMorphemeCard(c)) &&
+    morphFull.queue.length === 2 && morphFull.queue.every((c) => !isMorphemeCard(c)) &&
+    bothFree.morphNewCount === 2 && bothFree.newCount === 4;
+  check(
+    'AC-11 词根卡独立预算（D11）',
+    budgetOk,
+    budgetOk
+      ? `阶段 1 用尽仍派 ${s1Full.queue.length} 张词根卡；词根用尽仍派 ${morphFull.queue.length} 张普通卡`
+      : JSON.stringify({ s1: s1Full.queue.length, morph: morphFull.queue.length, both: bothFree.newCount }),
+  );
+
+  /* AC-12 客观判定不得把正确答案判错：产出卡答案完整 + 干扰项语义不重叠 */
+  const { buildQuiz } = require(join(outDir, 'lib/quiz.js'));
+
+  const derivations = Array.from({ length: 12 }, (_, i) => `deriv${i}`);
+  const prodCard = {
+    id: 'm.root.spect:prod', familyId: '', wordId: '', template: 'morpheme_to_words',
+    direction: 'productive', front: 'spect — to look', back: derivations.join(', '), interleaveGroup: 0,
+  };
+  const prodQuiz = buildQuiz(prodCard, undefined, []);
+  const ninthAnswerable = prodQuiz?.answers.includes('deriv8') === true;
+
+  const similarWords = [
+    { id: 'w1', definitionL1: '关于；大约' },
+    { id: 'w2', definitionL1: '大约' },        // 与正确答案互相包含，不能当干扰项
+    { id: 'w3', definitionL1: '机器' },
+    { id: 'w4', definitionL1: '国家' },
+    { id: 'w5', definitionL1: '语言' },
+  ];
+  const meaningCard = {
+    id: 'w.about:rec', familyId: 'f', wordId: 'w1', template: 'word_to_meaning',
+    direction: 'receptive', front: 'about', back: '大约', interleaveGroup: 0,
+  };
+  const meaningQuiz = buildQuiz(meaningCard, similarWords[0], similarWords);
+  const noOverlap = meaningQuiz?.choices.includes('大约') === false;
+
+  check(
+    'AC-12 判定不误伤正确答案',
+    prodQuiz?.answers.length === 12 && ninthAnswerable && noOverlap === true,
+    `派生词答案 ${prodQuiz?.answers.length}/12（第 9 个可判对 ${ninthAnswerable}）；` +
+      `相似释义未进选项 ${noOverlap}`,
   );
 
   /* 附加观测：对真实词表的切出率（有词表文件时才跑，不作断言） */
