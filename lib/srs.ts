@@ -103,6 +103,23 @@ export interface SessionInput {
   now?: number;
 }
 
+/**
+ * 新卡按「识别 → 产出」交替排列。
+ * 之前直接按 cards 原序取（`w.xx:prod` 在 `w.xx:rec` 之前，因为 'p' < 'r'），
+ * 结果一整批新卡全是产出方向 —— 新手还没认过这个词就要拼出来，连续答错。
+ * 先认后说：同一词的两张卡相邻出现，也更符合"能认 ≠ 能说"的双向设计。
+ */
+function alternateDirections(list: Card[]): Card[] {
+  const rec = list.filter((c) => c.direction === 'receptive');
+  const prod = list.filter((c) => c.direction === 'productive');
+  const out: Card[] = [];
+  for (let i = 0; i < Math.max(rec.length, prod.length); i += 1) {
+    if (rec[i]) out.push(rec[i]);
+    if (prod[i]) out.push(prod[i]);
+  }
+  return out;
+}
+
 /** 组一场学习：到期卡优先（按逾期程度），再补新卡（受每日上限约束），整体交错 */
 export function buildSession({ cards, states, newLimit, learnedToday, now = Date.now() }: SessionInput) {
   const due: Card[] = [];
@@ -117,7 +134,7 @@ export function buildSession({ cards, states, newLimit, learnedToday, now = Date
   due.sort((a, b) => (states.get(a.id)!.dueAt ?? 0) - (states.get(b.id)!.dueAt ?? 0));
 
   const remainingNew = Math.max(0, newLimit - learnedToday);
-  const newCards = fresh.slice(0, remainingNew);
+  const newCards = alternateDirections(fresh).slice(0, remainingNew);
 
   return {
     queue: [...interleave(due, (c) => c.interleaveGroup), ...interleave(newCards, (c) => c.interleaveGroup)],
