@@ -105,7 +105,9 @@ export default function DashboardPage() {
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>状态：{STATUS_META[runtime[selectedNode.id]?.status ?? 'locked'].label}</span>
                 <span>
-                  进度：{runtime[selectedNode.id]?.learned ?? 0}/{runtime[selectedNode.id]?.total ?? 0}
+                  已学 {runtime[selectedNode.id]?.learned ?? 0}/
+                  {runtime[selectedNode.id]?.total ?? 0} · 已掌握{' '}
+                  {runtime[selectedNode.id]?.mastered ?? 0}
                 </span>
                 <span>预计 {selectedNode.estimatedMinutes} 分钟</span>
               </div>

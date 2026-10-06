@@ -77,7 +77,9 @@ export function computeRuntime(
     else status = 'learning';
 
     statusById[node.id] = status;
-    result[node.id] = { nodeId: node.id, status, learned: mastered, total };
+    // learned = 学过（≥1 次复习）的卡片数，mastered = 达掌握门槛的卡片数。
+    // 早前这里把 learned 直接填成 mastered，导致刚学完一天的用户看到进度永远是 0/N。
+    result[node.id] = { nodeId: node.id, status, learned, mastered, total };
   }
 
   return result;

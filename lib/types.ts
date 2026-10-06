@@ -202,7 +202,10 @@ export interface PathNode {
 export interface NodeRuntime {
   nodeId: string;
   status: NodeStatus;
+  /** 已学过（复习过至少一次）的卡片数 */
   learned: number;
+  /** 已达到掌握门槛（稳定度 + 次数）的卡片数 */
+  mastered: number;
   total: number;
 }
 
