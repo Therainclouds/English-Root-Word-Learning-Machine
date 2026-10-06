@@ -164,6 +164,25 @@ try {
     glueOk ? '规则版需润色、已润色/未切分跳过；缺助记才生成' : '判定不符预期',
   );
 
+  /* AC-9 深度讲解的格式闸门（词源演变 / 派生词逐词拆解必须规范） */
+  const withExplain = SEED_MORPHEMES.filter((m) => m.explain?.etymology);
+  const badEtymology = withExplain.filter(
+    (m) => m.explain.etymology.trim().length < 30 || m.explain.etymology.trim().length > 600,
+  );
+  const badDerivatives = withExplain.flatMap((m) =>
+    (m.explain.derivatives ?? [])
+      .filter((d) => !d.word?.trim() || !d.gloss?.includes('→'))
+      .map((d) => `${m.id}:${d.word}`),
+  );
+  const tooShortExplain = withExplain.filter((m) => (m.explain.etymology ?? '').includes('。') === false);
+  check(
+    'AC-9 讲解格式（标杆）',
+    withExplain.length >= 8 && badEtymology.length === 0 && badDerivatives.length === 0,
+    `${withExplain.length} 条讲解；长度异常 ${badEtymology.length}；派生词格式异常 ${badDerivatives.length}` +
+      (badDerivatives.length ? ` → ${badDerivatives.slice(0, 3).join(', ')}` : '') +
+      (tooShortExplain.length ? `；疑似缺句读 ${tooShortExplain.length}` : ''),
+  );
+
   /* 附加观测：对真实词表的切出率（有词表文件时才跑，不作断言） */
   const listPath = join(root, 'public/wordlists/top-10000.txt');
   if (existsSync(listPath)) {

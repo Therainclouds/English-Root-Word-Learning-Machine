@@ -505,8 +505,35 @@ export default function SettingsPage() {
           >
             润色字面义
           </button>
+          <button
+            data-testid="morph-explain-btn"
+            disabled={!settings.llm.enabled || morphBatchRunning}
+            onClick={async () => {
+              setMorphBatchRunning(true);
+              setMorphState('补全讲解中…');
+              try {
+                const { ensureMorphemeExplanations } = await import('@/lib/llm/morpheme');
+                const result = await ensureMorphemeExplanations(settings.llm, morphLimit, (done, total) =>
+                  setMorphState(`补全讲解中… ${done}/${total}`),
+                );
+                setMorphState(
+                  `讲解补全完成：成功 ${result.ok}，失败 ${result.failed}` +
+                    (result.failed ? '（失败的可在词库页逐个重试）' : ''),
+                );
+                await reload();
+              } catch (err) {
+                setMorphState(`失败：${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setMorphBatchRunning(false);
+              }
+            }}
+            className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs disabled:opacity-50"
+          >
+            批量补全词根讲解
+          </button>
           <span className="text-xs text-muted-foreground">
-            LLM 只补助记与字面义；<b>切分始终是确定性代码完成</b>（D10）。结果写回共享库，不会重复请求。
+            LLM 只补<b>讲解与助记</b>（词源演变 / 异形 / 派生词 / 易混），
+            <b>切分始终由确定性代码完成</b>（D10）。结果写回共享库，不会重复请求。
           </span>
         </div>
 

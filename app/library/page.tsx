@@ -241,6 +241,52 @@ export default function LibraryPage() {
                 <div>负担：{activeMorpheme.difficulty}/5 · 可信度 {activeMorpheme.confidence.toFixed(2)}</div>
               </div>
 
+              {/* 深度讲解：词源演变 → 异形成因 → 派生词逐词拆解 → 易混辨析 */}
+              {activeMorpheme.explain?.etymology ? (
+                <div
+                  className="space-y-3 rounded-lg border border-border/60 bg-background/50 p-3"
+                  data-testid="morph-explain"
+                >
+                  <div>
+                    <div className="text-xs text-muted-foreground">词源演变</div>
+                    <p className="mt-1 text-sm leading-relaxed">{activeMorpheme.explain.etymology}</p>
+                  </div>
+                  {activeMorpheme.explain.allomorphNote && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">异形从哪来</div>
+                      <p className="mt-1 text-sm leading-relaxed">
+                        {activeMorpheme.explain.allomorphNote}
+                      </p>
+                    </div>
+                  )}
+                  {(activeMorpheme.explain.derivatives?.length ?? 0) > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">派生词逐词拆解</div>
+                      <ul className="mt-1 space-y-1">
+                        {activeMorpheme.explain.derivatives!.map((d) => (
+                          <li key={d.word} className="rounded-md bg-card/60 px-2 py-1 text-xs">
+                            <b>{d.word}</b> — {d.gloss}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {activeMorpheme.explain.confusion && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">易混辨析</div>
+                      <p className="mt-1 text-sm leading-relaxed">
+                        {activeMorpheme.explain.confusion}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  暂无深度讲解（词源演变 / 异形 / 派生词逐词拆解 / 易混辨析）。
+                  在设置页启用大模型后点「批量补全词根讲解」即可生成，写入共享库后所有人复用。
+                </p>
+              )}
+
               <div>
                 <div className="text-xs text-muted-foreground">
                   派生词（{derivatives.length}）

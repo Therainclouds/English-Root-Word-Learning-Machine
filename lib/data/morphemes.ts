@@ -1,4 +1,4 @@
-import type { Morpheme, MorphemeOrigin, MorphemeType } from '../types';
+import type { Morpheme, MorphemeExplain, MorphemeOrigin, MorphemeType } from '../types';
 
 /**
  * 种子词素库（S-007）
@@ -46,7 +46,7 @@ function morph(
   };
 }
 
-export const SEED_MORPHEMES: Morpheme[] = [
+const RAW_MORPHEMES: Morpheme[] = [
   /* ---------------- 前缀 ---------------- */
   morph('prefix', 'un', ['un'], 'old_english', 'un-', 'not; opposite; reverse', '不；相反', ['negation'], 120, 1, 0.95),
   morph('prefix', 're', ['re'], 'latin', 're-', 'again; back', '再；回', ['aspect', 'repetition'], 110, 1, 0.95),
@@ -124,6 +124,128 @@ export const SEED_MORPHEMES: Morpheme[] = [
  */
 export const MIN_PREFIX_LENGTH = 2;
 export const MIN_AFFIX_LENGTH = 3;
+
+/**
+ * 深度讲解（深入学习用）
+ *
+ * 这里只**手写高频词根作为质量标杆**：说明词源演变、异形成因、派生词的字面义合成、以及易混辨析。
+ * 其余词根由 LLM 按同样的结构与口吻批量补全（设置页「批量补全词根讲解」），写回共享库后不再重复请求（D10）。
+ *
+ * 写作要求（也是给 LLM 的 few-shot 标准）：
+ * - etymology：讲"为什么是这个意思"，要有语义演变的因果，不要只重复中文对应
+ * - allomorphNote：解释异形从哪来（音变 / 同化 / 拉丁与法语双通道）
+ * - derivatives：字面义合成 → 现代义，如 report = re(back) + port(carry) → 把消息带回来 → 报告
+ * - confusion：说清与近义词根的**区别点**，而不是各自释义
+ */
+const EXPLAIN_SEED: Record<string, MorphemeExplain> = {
+  'm.root.port': {
+    etymology:
+      '拉丁 portare =「搬运、携带」。罗马人的"搬运"既指货物也指门户（porta 门是货物进出之口），这两条线英语都继承了：transport 是"搬运到别处"，portal 是"门"。核心始终是"把东西从 A 处带到 B 处"。',
+    allomorphNote: '形位稳定，几乎只有 port 一形（portable / porter / export 皆同）。注意 port 单独作名词是"港口"，正是"货物进出之口"。',
+    derivatives: [
+      { word: 'transport', gloss: 'trans(across) + port(carry) → 横着搬运 → 运输' },
+      { word: 'export', gloss: 'ex(out) + port → 运出去 → 出口' },
+      { word: 'import', gloss: 'im(in) + port → 运进来 → 进口' },
+      { word: 'support', gloss: 'sup(under) + port → 在下面扛着 → 支持' },
+      { word: 'report', gloss: 're(back) + port → 把消息带回来 → 报告' },
+    ],
+    confusion:
+      '与 fer（to carry）区分：port 偏"位置搬运/运输"（有明确的起点终点），fer 偏"承载、带来"（refer / transfer / suffer），且 fer 另有 lat 异形。',
+  },
+  'm.root.spect': {
+    etymology:
+      '拉丁 specere =「看」。罗马人用"看"造出一整族词：看的人（spectator）、被看的事物（spectacle）、在下面偷偷看（suspect）。进入英语后核心义从"用眼看"扩展到"审视、观点"——perspective 就是"透过…看"→ 视角。',
+    allomorphNote:
+      '有四个形：spect 是基本形（inspect）；spec 见于 spectacle / species；spic 是元音弱化（suspicious = su + spic）；pect 是词首 s 脱落（expect = ex + pect）。',
+    derivatives: [
+      { word: 'inspect', gloss: 'in(into) + spect → 往里看 → 检查' },
+      { word: 'respect', gloss: 're(again) + spect → 一再回看、看重 → 尊重' },
+      { word: 'suspect', gloss: 'sus(under) + spect → 在下面偷偷看 → 怀疑' },
+      { word: 'prospect', gloss: 'pro(forward) + spect → 向前看 → 前景' },
+      { word: 'expect', gloss: 'ex(out) + pect → 向外张望等待 → 期待' },
+    ],
+    confusion:
+      '三条"看"要分清：spect（拉丁"看"的动作）、vid/vis（拉丁"看见"，偏结果：video / visible）、scope（希腊"看/观察工具"：telescope / microscope）。',
+  },
+  'm.root.dict': {
+    etymology:
+      '拉丁 dicere =「说、宣告」。古罗马的"说"带权威意味（dictator 是说话算数的人），所以 dict 系词常含"规定、权威地说"：dictate 是口述/命令，dictionary 是收录说法的书。',
+    allomorphNote: 'dict 与 dic 交替：名词与结合形多用 dict（diction / predict），-ate 等动词后缀前可能出现 dic。拼写上以 dict 为主。',
+    derivatives: [
+      { word: 'predict', gloss: 'pre(before) + dict → 事先说 → 预测' },
+      { word: 'contradict', gloss: 'contra(against) + dict → 说反话 → 反驳' },
+      { word: 'dictate', gloss: 'dict + ate → 说出来让人记下 → 口述；引申为命令' },
+      { word: 'addict', gloss: 'ad(toward) + dict → 原义"被指派、献身于" → 上瘾' },
+    ],
+    confusion:
+      '与希腊词根 log（word / reason）分工：dict 偏日常与权威语境（predict / contradict），log 偏学术（dialogue / -ology）。',
+  },
+  'm.root.scrib': {
+    etymology:
+      '拉丁 scribere =「写」，原义是"用尖笔在蜡板上划刻"——所以它天生带"留下痕迹"的意味。英语里 scrib 多用于"书写行为与文件"，与希腊的 graph（写、画、记录）大致分工。',
+    allomorphNote: 'scrib 出现在动词（describe / prescribe / subscribe），script 出现在名词与分词（script / description / manuscript）。',
+    derivatives: [
+      { word: 'describe', gloss: 'de(down) + scrib → 写下来 → 描述' },
+      { word: 'prescribe', gloss: 'pre(before) + scrib → 事先写好 → 开处方 / 规定' },
+      { word: 'subscribe', gloss: 'sub(under) + scrib → 在文件下面签名 → 订阅 / 认购' },
+      { word: 'manuscript', gloss: 'manu(hand) + script → 手写的 → 手稿' },
+    ],
+    confusion: '与 graph（希腊"写/画"）区分：-graph 常带"图、记录仪"意味（photograph / paragraph / telegraph）。',
+  },
+  'm.root.duc': {
+    etymology:
+      '拉丁 ducere =「引导、牵引」。核心是"带着走"：把人带向某处（conduct）、把水引过去（aqueduct 高架渠）、把孩子带大（educate 原义"引出来、养育"）。',
+    allomorphNote: 'duc 出现在动词（produce / reduce / introduce），duct 多出现在名词与过去分词（product / conductor / duct 管道）。',
+    derivatives: [
+      { word: 'produce', gloss: 'pro(forward) + duc → 向前引出 → 生产' },
+      { word: 'reduce', gloss: 're(back) + duc → 往回引 → 减少' },
+      { word: 'conduct', gloss: 'con(together) + duc → 带着一起走 → 引导 / 指挥' },
+      { word: 'education', gloss: 'e(out) + duc → 把（潜能）引出来 → 教育' },
+    ],
+    confusion: '与 fer（carry）都含"带"：duc 强调"引领方向"，fer 强调"承载移动"。aqueduct（引水道）对比 transfer（转移）。',
+  },
+  'm.root.fer': {
+    etymology:
+      '拉丁 ferre =「携带、承受」。它是不规则动词，完成时词干变成 lat，于是英语里 fer 与 lat 两形同义并存：transfer / translate 是同一个词根的两种形态。核心是"从一处带到另一处"，并引申为"承受"（suffer = 在下面承受）。',
+    allomorphNote: 'fer 用于多数情况（transfer / prefer / refer）；lat 出现在 -ion / -ive 等后缀前（translation / relative / collate）。',
+    derivatives: [
+      { word: 'transfer', gloss: 'trans(across) + fer → 横着带过去 → 转移' },
+      { word: 'refer', gloss: 're(back) + fer → 带回到…上 → 参考 / 提及' },
+      { word: 'prefer', gloss: 'pre(before) + fer → 放到前面 → 更喜欢' },
+      { word: 'translate', gloss: 'trans + lat → 把意义带过去 → 翻译' },
+    ],
+    confusion: '与 port 区分：fer 是"携带、承载"（可带抽象物：preference），port 是"运输、搬运"（偏具体位移）。',
+  },
+  'm.root.mit': {
+    etymology:
+      '拉丁 mittere =「送、放手」。核心动作是"让…离开自己"：送出（submit → 提交）、放出（emit → 发射）、放开允许（permit → 许可）。"发送"这个动作天然带方向，所以搭配的前缀决定意思。',
+    allomorphNote: 'mit 出现在动词（submit / permit / commit），miss 出现在名词与形容词（mission / missile / permission）。',
+    derivatives: [
+      { word: 'submit', gloss: 'sub(under) + mit → 送到下面 → 提交；引申为服从' },
+      { word: 'permit', gloss: 'per(through) + mit → 放它过去 → 许可' },
+      { word: 'commit', gloss: 'com(together) + mit → 一起交托出去 → 承诺；引申为犯（错）' },
+      { word: 'mission', gloss: 'miss + ion → 被送去（要做的事）→ 使命' },
+    ],
+    confusion: '与 pos（放置）区分：mit 强调"使离开、发送"，pos 强调"放在某处不动"。submit vs deposit 是典型对照。',
+  },
+  'm.root.pos': {
+    etymology:
+      '拉丁 ponere =「放置、摆放」。核心是"把东西放在某个位置"，引申出"设定、假定、姿态"：position 是位置，posture 是姿势，suppose 是"放在下面当基础"→ 假设。',
+    allomorphNote: 'pos / pose 最常见（compose / position）；pon 出现在 -ent 前（component / proponent）；pound 是日耳曼化形式（compound / expound）。',
+    derivatives: [
+      { word: 'compose', gloss: 'com(together) + pos → 放在一起 → 组成 / 作曲' },
+      { word: 'oppose', gloss: 'op(against) + pos → 放在对面 → 反对' },
+      { word: 'suppose', gloss: 'sup(under) + pos → 放在下面作为基础 → 假设' },
+      { word: 'deposit', gloss: 'de(down) + pos → 放下 → 存放 / 押金' },
+    ],
+    confusion: '与 sta（站立）、mit（发送）三者常混：pos 是"放到某处"（有动作），sta 是"站在某处"（状态），mit 是"送出去"。',
+  },
+};
+
+/** 合并标杆讲解后的种子词素（导入器与离线自检都读这个） */
+export const SEED_MORPHEMES: Morpheme[] = RAW_MORPHEMES.map((m) =>
+  EXPLAIN_SEED[m.id] ? { ...m, explain: EXPLAIN_SEED[m.id] } : m,
+);
 
 /** 低于该可信度的词素不参与自动切分 */
 export const MIN_CONFIDENCE = 0.7;

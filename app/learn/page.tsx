@@ -9,7 +9,14 @@ import { checkSentences, type SentenceQuality } from '@/lib/llm/decision';
 import { ensureDefinition, isPending } from '@/lib/definitions';
 import { JUDGE_TEXT, judgeAnswer, maskSentence } from '@/lib/utils';
 import { buildQuiz, type Quiz } from '@/lib/quiz';
-import type { Card } from '@/lib/types';
+import type { Card, Morpheme } from '@/lib/types';
+
+const MORPH_TYPE_TEXT: Record<string, string> = {
+  root: '词根',
+  prefix: '前缀',
+  suffix: '后缀',
+  combining_form: '组合形式',
+};
 
 /** 卡片模板 → 正面提示（S-007 新增两种词根卡） */
 const TEMPLATE_LABEL: Record<string, string> = {
@@ -68,6 +75,31 @@ export default function LearnPage() {
   const quiz = current?.quiz;
   const word = card ? wordMap.get(card.wordId) : undefined;
   const sentence = card?.sentenceId ? sentenceMap.get(card.sentenceId) : undefined;
+
+  /** 词素表按需加载：答完后展示词素拆解与词源讲解（深入学习） */
+  const [morphemes, setMorphemes] = useState<Morpheme[]>([]);
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    void (async () => {
+      const { morphemesRepo } = await import('@/lib/db');
+      const rows = await morphemesRepo.all();
+      if (alive) setMorphemes(rows);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [ready]);
+
+  const morphById = useMemo(() => new Map(morphemes.map((m) => [m.id, m])), [morphemes]);
+  const decomposition = word?.decomposition ?? [];
+  const rootEtymology = useMemo(
+    () =>
+      decomposition
+        .map((ref) => morphById.get(ref.morphemeId))
+        .find((m) => m?.type === 'root')?.explain?.etymology ?? '',
+    [decomposition, morphById],
+  );
 
   useEffect(() => {
     setPicked(null);
@@ -337,6 +369,34 @@ export default function LearnPage() {
               {word && <div className="mt-2 text-sm text-muted-foreground">{word.definitionL1}</div>}
               {sentence && (
                 <div className="mt-2 text-sm text-foreground/90">例句：{sentence.text}</div>
+              )}
+
+              {/* 词素拆解 + 词源讲解：把"为什么是这个意思"放在学习现场 */}
+              {decomposition.length > 0 && (
+                <div
+                  className="mt-3 rounded-lg bg-background/60 p-3"
+                  data-testid="morph-breakdown"
+                >
+                  <div className="text-xs text-muted-foreground">词素拆解</div>
+                  <ul className="mt-1 space-y-1 text-xs">
+                    {decomposition.map((ref) => {
+                      const m = morphById.get(ref.morphemeId);
+                      return (
+                        <li key={`${ref.morphemeId}-${ref.allomorph}`}>
+                          <b>{ref.allomorph}</b>
+                          {m
+                            ? ` · ${MORPH_TYPE_TEXT[m.type] ?? m.type} · ${m.coreMeaning}（${m.l1Gloss}）`
+                            : ''}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {rootEtymology && (
+                    <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
+                      {rootEtymology}
+                    </p>
+                  )}
+                </div>
               )}
               <button
                 data-testid="next-card"

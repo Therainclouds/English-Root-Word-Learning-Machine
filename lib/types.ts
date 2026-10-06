@@ -41,6 +41,18 @@ export interface MorphemeRef {
   allomorph: string;
 }
 
+/** 词素讲解（深入学习用）：回答"为什么是这个意思、怎么记住、和谁容易混" */
+export interface MorphemeExplain {
+  /** 词源与语义演变：原始义 → 现代义，讲清"为什么" */
+  etymology: string;
+  /** 异形说明：为什么会有这些形式（同化 / 音变 / 拉丁与法语双通道） */
+  allomorphNote?: string;
+  /** 派生词逐词讲解：字面义合成 → 现代义 */
+  derivatives?: { word: string; gloss: string }[];
+  /** 易混辨析：与相近词素怎么区分 */
+  confusion?: string;
+}
+
 /** 词素：词根 / 前缀 / 后缀（S-007，对应 docs/root-data-schema.md §2.1） */
 export interface Morpheme {
   /** `m.<type>.<form>`，稳定可推导（D6） */
@@ -66,6 +78,8 @@ export interface Morpheme {
   difficulty: number;
   /** LLM 可选补齐（D10） */
   mnemonic?: { story?: string; cognate?: string };
+  /** 深度讲解（D10）：手写标杆 + LLM 按同样格式批量补全 */
+  explain?: MorphemeExplain;
   confusingWith: string[];
   /** 0-1 数据可信度，低于阈值不参与自动切分 */
   confidence: number;
