@@ -41,8 +41,9 @@ const EXPECT_UNSEGMENTED = [
   'order', 'water', 'never', 'under', 'enter', 'center', 'after', 'letter',
   'better', 'matter', 'consider', 'remember', 'together', 'another', 'either',
   'children', 'universe', 'evidence', 'service', 'event', 'port', 'form',
-  'credit', 'visit', 'video', 'maintain', 'difficult', 'manual', 'general',
-  'insert', 'concert', 'uniform',
+  'credit', 'visit', 'video', 'maintain', 'difficult', 'general', 'insert',
+  'uniform', 'machine', 'school', 'country', 'language', 'money', 'people',
+  'system',
 ];
 
 const results = [];
