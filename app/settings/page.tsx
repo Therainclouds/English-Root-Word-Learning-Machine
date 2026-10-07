@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ListPlus, Scale, Server, Sparkles, Users } from 'lucide-react';
+import { AlertTriangle, BookOpen, ListPlus, Scale, Server, Sparkles, Users } from 'lucide-react';
 import { useAppContext } from '@/components/app-provider';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -105,6 +105,8 @@ export default function SettingsPage() {
   const [morphState, setMorphState] = useState<string | null>(null);
   const [morphLimit, setMorphLimit] = useState(5);
   const [morphBatchRunning, setMorphBatchRunning] = useState(false);
+  const [dictRunning, setDictRunning] = useState(false);
+  const [dictState, setDictState] = useState<string | null>(null);
 
   if (!ready) {
     return <div className="py-24 text-center text-sm text-muted-foreground">载入中…</div>;
@@ -417,6 +419,56 @@ export default function SettingsPage() {
             className="whitespace-pre-wrap rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
           >
             {importState}
+          </pre>
+        )}
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-border/60 bg-card/40 p-5">
+        <div className="flex items-center gap-2">
+          <BookOpen className="size-4 text-primary" />
+          <h2 className="text-lg font-semibold">内置释义导入（离线词典）</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          用 ECDICT（76 万词条的免费英汉词典）在<b>构建期</b>生成的释义数据，覆盖本词表
+          <b>2996 / 3000 词（99.9%）</b>，含中文释义、英文释义、音标与考纲标签，打包仅 0.62 MB。
+          <b>不需要配置大模型</b>就能让学习页正常出题 —— 这是"没有 key 也能用"的关键一步。
+          已有释义（大模型生成或手写）的词不会被覆盖。
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            data-testid="import-dict-btn"
+            disabled={dictRunning}
+            onClick={async () => {
+              setDictRunning(true);
+              setDictState('导入中…');
+              try {
+                const { importBuiltinDefinitions } = await import('@/lib/data/definition-importer');
+                const r = await importBuiltinDefinitions();
+                setDictState(
+                  `完成：词库 ${r.total} 词，填入释义 ${r.filled}、已有释义跳过 ${r.skippedReady}、` +
+                    `词典未收录 ${r.missing}、耗时 ${r.durationMs}ms`,
+                );
+                await reload();
+              } catch (err) {
+                setDictState(`失败：${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setDictRunning(false);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {dictRunning ? '导入中…' : '导入内置释义'}
+          </button>
+          <span className="text-xs text-muted-foreground">
+            来源：ECDICT（仓库为 MIT，数据为多来源汇编）
+          </span>
+        </div>
+        {dictState && (
+          <pre
+            data-testid="dict-result"
+            className="whitespace-pre-wrap rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
+          >
+            {dictState}
           </pre>
         )}
       </section>

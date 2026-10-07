@@ -7,7 +7,11 @@ next-env.d.ts
 .DS_Store
 .env*.local
 proxy/.env
-public/wordlists/
+# 词表与内置释义是**部署产物必需**的文件（否则 clone 后构建出的应用没有内容），
+# 因此只忽略目录里的其他中间文件，这两个显式纳入版本管理。
+public/wordlists/*
+!public/wordlists/top-10000.txt
+!public/wordlists/definitions-zh.json
 
 # 本地构建残留 / 运行日志 / IDE 数据
 *.old/

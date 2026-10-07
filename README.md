@@ -50,6 +50,7 @@ node scripts/fetch-wordlist.mjs 3000    # → public/wordlists/top-10000.txt
 | `npm run dev` / `build` / `clean` | 开发 / 静态导出 / 清理缓存 |
 | `npm run proxy` | 本地转发代理（绕开第三方大模型的 CORS） |
 | `node scripts/fetch-wordlist.mjs [n]` | 下载公开词频表 |
+| `node scripts/build-definitions.mjs` | 从 ECDICT 生成内置释义（约需下载 63MB 词典，仓库已含生成结果） |
 
 | `node scripts/mock-llm.mjs` | 本地 mock 大模型端点（`/ok` `/fail` `/auth` `/empty` `/word`） |
 | `node scripts/check-page.mjs [url]` | 打开页面收集控制台错误与渲染文本 |
@@ -61,6 +62,7 @@ node scripts/fetch-wordlist.mjs 3000    # → public/wordlists/top-10000.txt
 | `node scripts/verify-morphemes.mjs` | 词根数据 + FSRS 排程离线自检（15 项，纯 node 无需浏览器） |
 | `node scripts/verify-s007.mjs` | 词根模块运行时验收（16 项） |
 | `node scripts/verify-fsrs.mjs` | FSRS 落库字段 / 日志特征 / 保持率面板（6 项） |
+| `node scripts/verify-dict.mjs` | 内置释义导入：覆盖率 ≥95%、重复导入稳定（5 项） |
 
 验收脚本前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
 
@@ -208,6 +210,21 @@ npm run dev
 
 验收：`node scripts/verify-morphemes.mjs`（AC-13~15）+ `node scripts/verify-fsrs.mjs`，
 详见 `specs/008-fsrs-engine.md`。
+
+## 内置释义：不配大模型也能学（S-009）
+
+词表导入后，释义由**构建期生成的内置词典**提供（ECDICT，76 万词条的免费英汉词典）：
+覆盖本词表 **2996 / 3000 词（99.9%）**，含中文释义、英文释义、音标与考纲标签，打包仅 0.51 MB。
+
+- **设置页 → 内置释义导入 → 「导入内置释义」**：一键填入（实测 3002 词耗时约 1.3 秒）
+- **不需要任何 API key**：解决了"用户得先会配大模型才能开始背单词"这个部署阻断问题
+- **不会覆盖**大模型生成或手写的释义；词典来源的数据可重复导入刷新（便于升级数据）
+- 数据由 `scripts/build-definitions.mjs` 生成，`source` / `license` 字段随数据保留以便追溯
+
+⚠️ ECDICT 仓库为 MIT，但其数据是多方来源汇编（自建词表 + cdict + BNC 语料 + WordNet + 网友贡献）：
+个人本地使用无碍，**商业分发前请自行复核来源授权**。
+
+验收：`node scripts/verify-dict.mjs`，详见 `specs/009-builtin-dictionary.md`。
 
 ## 词根词缀模块（S-007）
 
