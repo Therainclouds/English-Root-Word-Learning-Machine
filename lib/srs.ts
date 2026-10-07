@@ -22,15 +22,20 @@ function ratingOf(grade: number) {
  * 调度器参数。
  *
  * - `enable_fuzz`：给长间隔加抖动，避免同批导入的卡永远撞在同一天到期
- * - `enable_short_term: false`：**不**启用分钟级学习步骤。学习页是单次会话线性推进
- *   （按 index 顺序消费队列），分钟级到期卡会让队列在会话中途重排、直接导致跳卡；
- *   要启用必须先把它改成"按 cardId 定位当前卡"，属后续工作。
+ * - `enable_short_term` + `learning_steps`：**启用分钟级学习步骤**（Anki 默认的同款语义
+ *   `1m 10m`）。新卡先在分钟级巩固、再"毕业"到天级间隔；答错的卡 10 分钟后在同一会话内重现。
+ *   官方基准显示同日复习恰是所有算法的软肋（FSRS-6 在含同日复习场景 log loss 由 0.3460 升到 0.3842），
+ *   补上它比调参更有效。
+ *   ⚠️ 前提：学习页必须是**快照式队列**（见 `app/learn/page.tsx`），否则分钟级到期卡会插到
+ *   队列最前面、把用户正在答的题顶掉。
  * - `maximum_interval: 365`：一年封顶。实测默认参数下"连续答对 5 次"会排到 586 天后，
  *   对语言学习不现实；封顶后长间隔仍正常维持，只是不再无限拉长。
  */
 export const FSRS_BASE_PARAMS = {
   enable_fuzz: true,
-  enable_short_term: false,
+  enable_short_term: true,
+  learning_steps: ['1m', '10m'],
+  relearning_steps: ['10m'],
   maximum_interval: 365,
 } as const;
 
@@ -252,6 +257,33 @@ function alternateDirections(list: Card[]): Card[] {
     if (prod[i]) out.push(prod[i]);
   }
   return out;
+}
+
+/**
+ * 会话队列推进（纯函数，学习页与离线自检共用）。
+ *
+ * 把"已到期但不在队列里"的卡追加到**队尾**：启用分钟级学习步骤后，答错的卡会在
+ * 1 / 10 分钟后到期，它应当在同一会话里重现——但不能插到队首，否则用户正答着的题会被顶掉。
+ * 抽成纯函数是为了让这个行为能被离线验收覆盖（否则只能靠等 1 分钟的真实时钟）。
+ *
+ * @param queueIds   当前会话队列（cardId 顺序）
+ * @param candidates 候选卡（通常是本次 `session.queue`）
+ * @param dueAtOf    取某张卡的到期时间（无状态返回 Infinity，即视为未到期）
+ * @returns 新队列；无变化时返回**原引用**，便于 `setState` 跳过更新
+ */
+export function reviveDue(
+  queueIds: string[],
+  candidates: { id: string }[],
+  dueAtOf: (id: string) => number,
+  now = Date.now(),
+) {
+  const inQueue = new Set(queueIds);
+  const revived: string[] = [];
+  for (const c of candidates) {
+    if (inQueue.has(c.id)) continue;
+    if (dueAtOf(c.id) <= now) revived.push(c.id);
+  }
+  return revived.length ? [...queueIds, ...revived] : queueIds;
 }
 
 /** 组一场学习：到期卡优先（按逾期程度），再补新卡（受每日上限约束），整体交错 */

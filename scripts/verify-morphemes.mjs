@@ -299,14 +299,17 @@ try {
   const seq95 = probeSeq(0.95);
   const engineOk =
     seq90.length === 4 &&
-    seq90[3] > seq90[0] * 5 && // 间隔必须随成功复习持续增长
+    seq90[0] === 0 && // 首次答对仍在学习步骤内（分钟级，尚未排到天级间隔）
+    seq90[3] > seq90[0] + 5 && // 间隔必须随成功复习持续增长
     seq95[3] < seq90[3] && // 目标保持率越高，间隔越短
-    FSRS_BASE_PARAMS.enable_short_term === false && // 不启用分钟级步骤（学习页按 index 消费队列）
+    FSRS_BASE_PARAMS.enable_short_term === true && // 分钟级学习步骤已启用（学习页为快照式队列）
+    Array.isArray(FSRS_BASE_PARAMS.learning_steps) &&
+    FSRS_BASE_PARAMS.learning_steps.length === 2 &&
     FSRS_BASE_PARAMS.maximum_interval === 365;
   check(
-    'AC-13 FSRS 排程 + 目标保持率生效',
+    'AC-13 FSRS 排程 + 学习步骤 + 目标保持率',
     engineOk && currentRetention() === 0.95,
-    `保持率 0.9 → ${seq90.join('/')} 天；0.95 → ${seq95.join('/')} 天；当前生效 ${currentRetention()}`,
+    `保持率 0.9 → ${seq90.join('/')} 天；0.95 → ${seq95.join('/')} 天（首项 0 天＝仍在分钟级步骤）；当前生效 ${currentRetention()}`,
   );
 
   /* AC-14 旧数据迁移：SM-2 时代的 0–1 stability 不能被当成"不到 1 天" */
@@ -321,6 +324,24 @@ try {
     'AC-14 旧状态迁移（0–1 → 天数）',
     migratedNext.intervalDays >= 21 && migratedNext.difficulty >= 1 && migratedNext.difficulty <= 10,
     `旧用户（已复习 4 次 / 上次间隔 35 天）再答对一次 → 下次 ${migratedNext.intervalDays} 天，D=${migratedNext.difficulty.toFixed(2)}`,
+  );
+
+  /* AC-16 会话队列推进：分钟级到期的卡必须追加到**队尾**（不能顶掉当前题） */
+  const { reviveDue } = require(join(outDir, 'lib/srs.js'));
+  const baseQueue = ['a', 'b', 'c'];
+  const candidates = [{ id: 'a' }, { id: 'b' }, { id: 'd' }, { id: 'e' }];
+  const now2 = Date.now();
+  const dueAtMap = { a: 0, b: 0, d: now2 - 1000, e: now2 + 60000 };
+  const advanced = reviveDue(baseQueue, candidates, (id) => dueAtMap[id] ?? Infinity, now2);
+  const unchanged = reviveDue(baseQueue, [], () => 0, now2);
+  const queueOk =
+    JSON.stringify(advanced) === JSON.stringify(['a', 'b', 'c', 'd']) && // 已在队列的忽略、未到期的忽略、到期的追加队尾
+    advanced !== baseQueue &&
+    unchanged === baseQueue; // 无变化时返回原引用（避免 setState 空更新）
+  check(
+    'AC-16 到期卡追加到队尾',
+    queueOk,
+    `['a','b','c'] + 到期 d、未到期 e → ${JSON.stringify(advanced)}；无变化时返回原引用 ${unchanged === baseQueue}`,
   );
 
   /* AC-15 实际保持率统计（零参数的个体基准指标） */

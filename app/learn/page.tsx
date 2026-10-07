@@ -9,6 +9,7 @@ import { checkSentences, type SentenceQuality } from '@/lib/llm/decision';
 import { ensureDefinition, isPending } from '@/lib/definitions';
 import { JUDGE_TEXT, judgeAnswer, maskSentence } from '@/lib/utils';
 import { buildQuiz, type Quiz } from '@/lib/quiz';
+import { reviveDue } from '@/lib/srs';
 import type { Card, Morpheme } from '@/lib/types';
 
 const MORPH_TYPE_TEXT: Record<string, string> = {
@@ -34,8 +35,10 @@ export default function LearnPage() {
   const {
     ready,
     session,
+    cards,
     words,
     wordMap,
+    stateMap,
     sentenceMap,
     settings,
     grade,
@@ -47,7 +50,15 @@ export default function LearnPage() {
   const [genBusy, setGenBusy] = useState(false);
   /** 本次会话成绩（完成页用；不参与排程） */
   const [tally, setTally] = useState({ correct: 0, wrong: 0 });
-  const [index, setIndex] = useState(0);
+  /**
+   * 会话队列快照（cardId 顺序）。
+   *
+   * 为什么不直接用 `session.queue` 渲染：启用分钟级学习步骤后，答错的卡会在 1 分钟后到期，
+   * 它会被插到"到期优先"队列的**最前面**，于是整条队列重排、用户正在答的题被顶掉。
+   * 因此会话开始时取一次快照，答完即从队首移除；新到期的卡追加到**队尾**（见下方 effect）——
+   * 这正是学习步骤想要的语义：同一张卡在一次会话里重现，但不打断正在进行的学习。
+   */
+  const [queueIds, setQueueIds] = useState<string[] | null>(null);
   const [explain, setExplain] = useState<WordExplanation | null>(null);
   const [extra, setExtra] = useState<string[]>([]);
   const [quality, setQuality] = useState<SentenceQuality[]>([]);
@@ -59,18 +70,48 @@ export default function LearnPage() {
   /** 判定结果：null = 未作答 */
   const [judged, setJudged] = useState<'correct' | 'wrong' | null>(null);
 
-  /** 只有能客观出图的卡才进队列；其余等释义 / 切分生成后自动出现 */
+  /** 首次就绪时取队列快照；此后不随 states 变化重排 */
+  useEffect(() => {
+    if (!ready || queueIds !== null) return;
+    setQueueIds(session.queue.map((c) => c.id));
+  }, [ready, queueIds, session.queue]);
+
+  /**
+   * 把"已到期但不在队列里"的卡追加到队尾。
+   * 分钟级步骤（1m / 10m）到期后卡会重新出现在这里；答对的卡被排到几天后，不会进来。
+   * 判定逻辑抽在 `reviveDue` 里（纯函数），因此它可以被离线验收覆盖。
+   */
+  useEffect(() => {
+    if (!ready || queueIds === null) return;
+    const now = Date.now();
+    const next = reviveDue(
+      queueIds,
+      session.queue,
+      (id) => stateMap.get(id)?.dueAt ?? Infinity,
+      now,
+    );
+    if (next !== queueIds) setQueueIds(next);
+  }, [ready, queueIds, session.queue, stateMap]);
+
+  const cardById = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
+  const queueCards = useMemo(
+    () => (queueIds ?? []).map((id) => cardById.get(id)).filter((c): c is Card => !!c),
+    [queueIds, cardById],
+  );
+
+  /** 只有能客观出题的卡才进队列；其余等释义 / 切分生成后自动出现 */
   const items = useMemo(() => {
     const out: { card: Card; quiz: Quiz }[] = [];
-    for (const c of session.queue) {
+    for (const c of queueCards) {
       const quiz = buildQuiz(c, wordMap.get(c.wordId), words);
       if (quiz) out.push({ card: c, quiz });
     }
     return out;
-  }, [session.queue, wordMap, words]);
+  }, [queueCards, wordMap, words]);
 
-  const skipped = session.queue.length - items.length;
-  const current = items[index];
+  const skipped = queueCards.length - items.length;
+  /** 队首恒为当前题：不存在"序号错位"这种状态 */
+  const current = items[0];
   const card = current?.card;
   const quiz = current?.quiz;
   const word = card ? wordMap.get(card.wordId) : undefined;
@@ -109,7 +150,7 @@ export default function LearnPage() {
     setExtra([]);
     setQuality([]);
     setError(null);
-  }, [index, card?.id]);
+  }, [card?.id]);
 
   /** 客观判定：选择题看是否命中答案集；输入题必须完全一致（"接近"也算错） */
   const evaluate = useCallback(
@@ -134,8 +175,9 @@ export default function LearnPage() {
     const right = judged === 'correct';
     await grade(card, right ? GRADE_RIGHT : GRADE_WRONG);
     setTally((t) => (right ? { ...t, correct: t.correct + 1 } : { ...t, wrong: t.wrong + 1 }));
-    setIndex((i) => Math.min(i + 1, items.length));
-  }, [card, judged, grade, items.length]);
+    // 答完即出队：分钟级到期的卡由上面的 effect 追加到队尾，不在这里插回队首
+    setQueueIds((prev) => (prev ? prev.filter((id) => id !== card.id) : prev));
+  }, [card, judged, grade]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -219,8 +261,8 @@ export default function LearnPage() {
           累计掌握 {known.size} 个词族 · 估计水平 {profile.cefrEstimate} · 当前待复习 {dueCount} 张
         </p>
         <p className="mx-auto mt-3 max-w-md text-xs text-muted-foreground">
-          一个词族要连续 4 轮答对（间隔 1 → 3 → 7 → 16 天）才算「已掌握」；
-          今天只是把它们推进了第一轮，所以掌握数暂时还是 0 —— 这是 SRS 的正常节奏，不是没生效。
+          词族的识别卡要达到 FSRS 稳定度 <b>21 天</b>（约连续答对 3 轮）才算「已掌握」；
+          今天只是推进了第一轮，所以掌握数暂时还是 0 —— 这是 SRS 的正常节奏，不是没生效。
         </p>
         {skipped > 0 && (
           <div className="mt-4 space-y-2">
@@ -249,7 +291,7 @@ export default function LearnPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            {index + 1} / {items.length} · {isReceptive ? '识别方向' : '产出方向'}
+            剩余 {items.length} 张 · {isReceptive ? '识别方向' : '产出方向'}
           </span>
           <span>{quiz.kind === 'choice' ? '按 1-4 选择 · 空格下一张' : '输入答案 · 回车提交'}</span>
         </div>

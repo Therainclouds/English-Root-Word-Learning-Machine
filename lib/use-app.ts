@@ -143,6 +143,7 @@ export function useApp() {
   const stateMap = useMemo(() => new Map(states.map((s) => [s.cardId, s])), [states]);
   const sentenceMap = useMemo(() => new Map(sentences.map((s) => [s.id, s])), [sentences]);
   const wordMap = useMemo(() => new Map(words.map((w) => [w.id, w])), [words]);
+  const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
 
   const known = useMemo(() => computeKnownFamilies(families, cards, stateMap), [families, cards, stateMap]);
   const coverage = useMemo(() => estimateCoverage(families, known), [families, known]);
@@ -165,23 +166,35 @@ export function useApp() {
   /** 我的真实保持率：最近 100 次复习的答对比例（零参数的"个体基准"指标） */
   const retention = useMemo(() => retentionOf(logs), [logs]);
 
-  const learnedToday = useMemo(() => {
-    const key = todayKey();
-    return logs.filter((l) => todayKey(new Date(l.reviewedAt)) === key).length;
-  }, [logs]);
-
   /**
-   * 今日词根卡的学习条数（D11）。
-   * 必须与阶段 1 分开计量：否则答 10 张词根卡会被算成"学了 5 个新词"，
-   * 直接吃掉阶段 1 的 dailyNewLimit——正是 D11 要避免的挤兑。
+   * 今日"已学新卡"统计：先取每张卡今日最早的一条记录，再分别按词族 / 词根去重。
+   *
+   * 旧实现是「今日日志条数 / 2」，隐含"每词恰好 2 张卡、各答一次"的假设。
+   * 启用分钟级学习步骤后，一张新卡在同一会话里可能产生 3 条记录（1m 重现 / 10m 重现 / 毕业），
+   * 该假设失效会让新词额度被提前吃光。改为按**首次接触的唯一词族数**计量，
+   * 与"今天学了几个词"的语义对齐；词根卡同理且独立计量（D11）。
    */
-  const morphLearnedToday = useMemo(() => {
+  const learnedStats = useMemo(() => {
     const key = todayKey();
-    const morphCardIds = new Set(cards.filter(isMorphemeCard).map((c) => c.id));
-    return logs.filter(
-      (l) => todayKey(new Date(l.reviewedAt)) === key && morphCardIds.has(l.cardId),
-    ).length;
-  }, [logs, cards]);
+    const firstSeen = new Map<string, number>();
+    for (const l of logs) {
+      if (todayKey(new Date(l.reviewedAt)) !== key) continue;
+      const prev = firstSeen.get(l.cardId);
+      if (prev === undefined || l.reviewedAt < prev) firstSeen.set(l.cardId, l.reviewedAt);
+    }
+    const families = new Set<string>();
+    let morph = 0;
+    for (const cardId of firstSeen.keys()) {
+      const card = cardMap.get(cardId);
+      if (!card) continue;
+      if (isMorphemeCard(card)) morph += 1;
+      else if (card.familyId) families.add(card.familyId);
+    }
+    return { families: families.size, morph };
+  }, [logs, cardMap]);
+
+  /** 今日新学词族数（对外语义不变：界面上仍是一个数字） */
+  const learnedToday = learnedStats.families;
 
   const session = useMemo(
     () =>
@@ -189,11 +202,10 @@ export function useApp() {
         cards,
         states: stateMap,
         newLimit: learning.dailyNewLimit,
-        // 阶段 1 的新卡数 = 今日非词根卡条数 / 2（每词收发各一张卡）
-        learnedToday: (learnedToday - morphLearnedToday) / 2,
-        morphLearnedToday,
+        learnedToday: learnedStats.families,
+        morphLearnedToday: learnedStats.morph,
       }),
-    [cards, stateMap, learning.dailyNewLimit, learnedToday, morphLearnedToday],
+    [cards, stateMap, learning.dailyNewLimit, learnedStats],
   );
 
   const grade = useCallback(
