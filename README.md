@@ -266,7 +266,10 @@ npm run build     # 输出到 out/
 npm run start     # 本地预览（serve out）
 ```
 
-- **根域名托管**（Vercel / Netlify / Cloudflare Pages / 自有域名 + CDN）：上传 `out/` 即可，无需额外配置
+- **根路径托管（含直接用 IP 访问）**：上传 `out/` 即可，**无需任何额外配置**。
+  Nginx 默认 `listen 80 default_server;` 即监听 0.0.0.0，直接 `http://<服务器IP>/` 就能打开；
+  纯静态站不需要 Node 运行环境，也不需要 HTTPS（IndexedDB 在 HTTP 下可用）
+- **想在服务器上跑开发模式**（临时调试用，别用于正式部署）：`npm run dev:lan` 会监听 0.0.0.0
 - **GitHub Pages 项目页**（`user.github.io/<repo>/`）：需先配 `basePath` + `assetPrefix`，
   并在 `out/` 放一个空的 `.nojekyll` —— 否则 `_next/` 会被 Jekyll 忽略、整站资源 404
 - **访问者零配置即可学习**：打开后在设置页导入词表 → 点「导入内置释义」（S-009，覆盖 99.9% 的词，
