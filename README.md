@@ -256,6 +256,24 @@ LLM 只补助记与字面义润色，结果写回共享词库。
 2. **句型与语块**：限时句型、4/3/2 复述、场景对话
 3. **扩展与进阶**：学术词汇、词根词缀系统、听说输出
 
+## 部署（静态托管）
+
+产物是**纯静态站、零后端**：
+
+```bash
+npm run build     # 输出到 out/
+npm run start     # 本地预览（serve out）
+```
+
+- **根域名托管**（Vercel / Netlify / Cloudflare Pages / 自有域名 + CDN）：上传 `out/` 即可，无需额外配置
+- **GitHub Pages 项目页**（`user.github.io/<repo>/`）：需先配 `basePath` + `assetPrefix`，
+  并在 `out/` 放一个空的 `.nojekyll` —— 否则 `_next/` 会被 Jekyll 忽略、整站资源 404
+- **访问者零配置即可学习**：打开后在设置页导入词表 → 点「导入内置释义」（S-009，覆盖 99.9% 的词，
+  不需要任何 API key）；大模型只是可选增强
+- **数据在浏览器本地**（IndexedDB）：换域名 / 换浏览器 / 清缓存 = 进度重置，当前无云端备份（S-006 暂缓）
+- **生产不写日志**：应用代码零 `console` 调用，构建无 sourcemap（`productionBrowserSourceMaps` 默认关闭），
+  避免运行时开销
+
 ## 大模型配置
 
 设置页内置接入预设：OpenAI 兼容 / Anthropic 官方 / MiniMax（国内·国际）/ **本地代理** / Ollama。

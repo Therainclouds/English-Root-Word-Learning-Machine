@@ -52,6 +52,7 @@
 | `scripts/verify-s007.mjs` | 词根导入幂等、阶段 1 路径不受影响、交错分组、重新导入保留 LLM 讲解（16 项） |
 | `scripts/verify-fsrs.mjs` | FSRS 落库字段、日志特征、首页实际保持率面板（6 项） |
 | `scripts/verify-dict.mjs` | 内置释义数据可用、导入覆盖率 ≥95%、重复导入稳定（5 项） |
+| `scripts/verify-deploy.mjs` | **部署前自检**：产物路由完整、词典随包发布、真实静态托管下首页与子路由零 404 / 零控制台错误（8 项） |
 | `scripts/build-definitions.mjs` | 构建期从 ECDICT 生成内置释义（`node scripts/build-definitions.mjs`） |
 
 前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
