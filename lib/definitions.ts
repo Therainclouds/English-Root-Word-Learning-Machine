@@ -20,20 +20,49 @@ function isValidExplanation(exp: WordExplanation | null | undefined) {
   return text.length > 0 && text.length <= 200;
 }
 
-/** 卡片背面文案：英文释义优先，退化到中文，再退化到占位 */
-export function backText(definitionEn: string, definitionL1: string) {
-  return definitionEn || definitionL1 || '（释义待生成）';
+/**
+ * 卡片背面文案。
+ *
+ * 默认英文优先（D7：减少母语中介）——大模型生成的英文释义简短精准，适合做考点。
+ *
+ * 但**内置词典来源的词必须传 `preferL1 = true`**：ECDICT 的英文来自 WordNet，
+ * 其 synset 顺序不按常用度，首条常常是非常用义甚至术语
+ * （实测：`run` → "n. a score in baseball…"、`about` → "adj. on the move"）。
+ * 而词典的中文释义来自传统词典、按常用度排列，对中文学习者更可靠。
+ */
+export function backText(definitionEn: string, definitionL1: string, preferL1 = false) {
+  const en = definitionEn?.trim() ?? '';
+  const zh = definitionL1?.trim() ?? '';
+  if (preferL1) return zh || en || '（释义待生成）';
+  return en || zh || '（释义待生成）';
 }
 
 export function isPending(word: Word | undefined) {
   return !!word && (word.definitionStatus === 'pending' || !word.definitionEn.trim());
 }
 
-export async function ensureDefinition(cfg: LlmConfig, wordId: string): Promise<Word | null> {
+/**
+ * 是否值得让大模型重写释义。
+ *
+ * 默认只处理"待生成"的词；开启 `redoDictionary` 时，**内置词典来源**的词也算在内
+ * （S-009 的词典数据覆盖率高但质量有限：英文来自 WordNet、中文来自传统词典，
+ * 用户配好大模型后应当能升级这批释义）。大模型生成或手写的词永不被自动覆盖。
+ */
+export function needsLlmDefinition(word: Word | undefined, redoDictionary = false) {
+  if (!word) return false;
+  if (isPending(word)) return true;
+  return redoDictionary && (word.sources ?? []).includes('ecdict');
+}
+
+export async function ensureDefinition(
+  cfg: LlmConfig,
+  wordId: string,
+  opts?: { redoDictionary?: boolean },
+): Promise<Word | null> {
   const db = await getSharedDb();
   const word = (await db.get('words', wordId)) as Word | undefined;
   if (!word) return null;
-  if (!isPending(word)) return word;
+  if (!needsLlmDefinition(word, opts?.redoDictionary)) return word;
 
   const pending = inflight.get(wordId);
   if (pending) return pending;
@@ -93,11 +122,12 @@ export async function ensureDefinitions(
   cfg: LlmConfig,
   wordIds: string[],
   onProgress?: (done: number, total: number) => void,
+  opts?: { redoDictionary?: boolean },
 ): Promise<{ ok: number; failed: number }> {
   let ok = 0;
   let failed = 0;
   for (let i = 0; i < wordIds.length; i += 1) {
-    const result = await ensureDefinition(cfg, wordIds[i]);
+    const result = await ensureDefinition(cfg, wordIds[i], opts);
     if (result && result.definitionStatus === 'ready') ok += 1;
     else failed += 1;
     onProgress?.(i + 1, wordIds.length);

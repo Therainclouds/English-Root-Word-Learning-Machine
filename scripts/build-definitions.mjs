@@ -38,17 +38,50 @@ const words = readFileSync(wordlistPath, 'utf8')
 const want = new Set(words);
 console.log(`目标词表：${words.length} 词`);
 
-/* 2. 释义清洗：卡片一行内要显示完，取前两行、限长
+/* 2. 释义清洗
  * 注意：ECDICT 的多个释义之间用的是**字面 `\n`**（两个字符），不是真正的换行，
  * 因此必须先把它还原成换行再按行截取，否则卡片上会显示成 "…关于\nadv. 大约…"。 */
-function tidy(text, limit) {
-  const lines = String(text ?? '')
+function splitLines(text) {
+  return String(text ?? '')
     .replace(/\\n/g, '\n')
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function tidyZh(text, limit) {
+  const lines = splitLines(text);
   if (!lines.length) return '';
   let out = lines[0];
+  if (out.length < 12 && lines[1]) out += `；${lines[1]}`;
+  return out.replace(/\s+/g, ' ').slice(0, limit);
+}
+
+/** WordNet 的词性缩写 → 通行写法（`s.` 是 adjective satellite，`r.` 是副词） */
+const POS_FIX = [
+  [/^s\.\s+/, 'adj. '],
+  [/^a\.\s+/, 'adj. '],
+  [/^j\.\s+/, 'adj. '],
+  [/^r\.\s+/, 'adv. '],
+];
+
+/** WordNet 的交叉引用条目（如 "v. i. See Thee."）对学习毫无价值，整条丢弃 */
+const CROSS_REF = /(?:^|\s)see\s+[a-z]/i;
+
+/**
+ * 英文释义清洗：丢弃交叉引用 → 规范化词性缩写 → 取首条。
+ * 若首条被丢弃则自动落到下一条，避免出现 `the` 显示成 "v. i. See Thee." 这类噪声。
+ */
+function tidyEn(text, limit) {
+  const lines = splitLines(text).filter((s) => !CROSS_REF.test(s));
+  if (!lines.length) return '';
+  let out = lines[0];
+  for (const [re, rep] of POS_FIX) {
+    if (re.test(out)) {
+      out = out.replace(re, rep);
+      break;
+    }
+  }
   if (out.length < 12 && lines[1]) out += `；${lines[1]}`;
   return out.replace(/\s+/g, ' ').slice(0, limit);
 }
@@ -76,8 +109,8 @@ const finishRow = () => {
   }
   const w = (row[idx.word] ?? '').toLowerCase();
   if (want.has(w) && !entries[w]) {
-    const zh = tidy(row[idx.translation], 90);
-    const en = tidy(row[idx.definition], 90);
+    const zh = tidyZh(row[idx.translation], 90);
+    const en = tidyEn(row[idx.definition], 90);
     if (zh || en) {
       entries[w] = {
         zh,

@@ -88,7 +88,13 @@ const READ_COVERAGE = `(async () => {
   const withZh = words.filter(w => { const t = String(w.definitionL1 ?? '').trim(); return t && !t.includes('待生成'); }).length;
   const withIpa = words.filter(w => String(w.ipa ?? '').trim()).length;
   const ecDictSourced = words.filter(w => (w.sources ?? []).includes('ecdict')).length;
-  return JSON.stringify({ total: words.length, ready, withZh, withIpa, ecDictSourced, cards: cards.length });
+  // 卡片背面抽样：**只取词典来源的词**（大模型生成的词按设计保留英文，不能被算作失败）
+  const cardMap = new Map(cards.map(c => [c.id, c]));
+  const samples = words
+    .filter(w => (w.sources ?? []).includes('ecdict'))
+    .slice(0, 4)
+    .map(w => ({ lemma: w.lemma, back: (cardMap.get(w.id + ':rec') || {}).back ?? null }));
+  return JSON.stringify({ total: words.length, ready, withZh, withIpa, ecDictSourced, cards: cards.length, samples });
 })()`;
 
 /** 内置词典文件本身的可用性 */
@@ -137,6 +143,12 @@ record(
   'AC-4 重复导入结果稳定',
   after2.ready === after.ready && after2.withZh === after.withZh && after2.total === after.total,
   `就绪 ${after.ready} → ${after2.ready}；中文 ${after.withZh} → ${after2.withZh}`,
+);
+
+record(
+  'AC-6 词典来源的卡片背面用中文（更贴近常用义）',
+  after.samples.length >= 3 && after.samples.every((s) => typeof s.back === 'string' && /[\u4e00-\u9fa5]/.test(s.back)),
+  after.samples.map((s) => `${s.lemma}="${String(s.back).slice(0, 12)}"`).join(' · ') || '无样本',
 );
 
 record('AC-5 控制台零错误', page.errors.length === 0, page.errors.slice(0, 2).join(' | ') || '无');

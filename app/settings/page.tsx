@@ -107,6 +107,8 @@ export default function SettingsPage() {
   const [morphBatchRunning, setMorphBatchRunning] = useState(false);
   const [dictRunning, setDictRunning] = useState(false);
   const [dictState, setDictState] = useState<string | null>(null);
+  /** 批量补全时是否连内置词典来源的释义一起重写（S-009 数据质量有限，配好大模型后可升级） */
+  const [redoDict, setRedoDict] = useState(false);
 
   if (!ready) {
     return <div className="py-24 text-center text-sm text-muted-foreground">载入中…</div>;
@@ -368,6 +370,16 @@ export default function SettingsPage() {
             onChange={(e) => setBatchCount(Number(e.target.value))}
             className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
           />
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              data-testid="redo-dict-checkbox"
+              checked={redoDict}
+              onChange={(e) => setRedoDict(e.target.checked)}
+              className="size-3.5"
+            />
+            连内置词典来源一起重写
+          </label>
           <button
             data-testid="batch-def-btn"
             disabled={!settings.llm.enabled || batchRunning}
@@ -375,14 +387,22 @@ export default function SettingsPage() {
               setBatchRunning(true);
               setImportState('批量补全中…');
               try {
-                const { ensureDefinitions, isPending } = await import('@/lib/definitions');
-                const targets = words.filter(isPending).slice(0, batchCount).map((w) => w.id);
+                const { ensureDefinitions, needsLlmDefinition } = await import('@/lib/definitions');
+                const targets = words
+                  .filter((w) => needsLlmDefinition(w, redoDict))
+                  .slice(0, batchCount)
+                  .map((w) => w.id);
                 if (!targets.length) {
-                  setImportState('没有待生成释义的词');
+                  setImportState(
+                    redoDict ? '没有待生成或词典来源的词' : '没有待生成释义的词（词典来源的需勾选左侧选项）',
+                  );
                   return;
                 }
-                const result = await ensureDefinitions(settings.llm, targets, (done, total) =>
-                  setImportState(`批量补全中… ${done}/${total}`),
+                const result = await ensureDefinitions(
+                  settings.llm,
+                  targets,
+                  (done, total) => setImportState(`批量补全中… ${done}/${total}`),
+                  { redoDictionary: redoDict },
                 );
                 setImportState(`批量补全完成：成功 ${result.ok}，失败 ${result.failed}`);
                 await reload();

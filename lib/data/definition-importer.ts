@@ -117,7 +117,8 @@ export async function importBuiltinDefinitions(): Promise<DefinitionImportResult
       exampleSentenceIds: existing?.exampleSentenceIds ?? [],
     });
 
-    const back = backText(definitionEn, definitionL1);
+    // 词典来源：卡片背面用中文优先 —— 见 backText 的注释（WordNet 首条常为非常用义）
+    const back = backText(definitionEn, definitionL1, true);
     const receptive = cardMap.get(`${word.id}:rec`);
     if (receptive) updatedCards.push({ ...receptive, back });
     const productive = cardMap.get(`${word.id}:prod`);
