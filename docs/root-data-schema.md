@@ -130,7 +130,7 @@ UserProfile (已知词族 / 覆盖率 / 统计)
 | 字段 | 说明 |
 | --- | --- |
 | `card_id`, `user_id` | 主键 |
-| `due_at`, `interval_days`, `ease`, `lapses`, `reps` | SRS 状态（推荐 FSRS，或 SM-2 起步） |
+| `due_at`, `interval_days`, `stability`, `difficulty`, `state`, `lapses`, `reps` | SRS 状态（**已采用 FSRS-6**，见 specs/008） |
 | `last_interval_ratio` | 用于调参 |
 | `direction` | 记录方向，产出方向单独排程（通常更密） |
 | `interleave_group` | 交错组 ID（同一词根的词 → 分配到**不同**组） |

@@ -1,11 +1,17 @@
 import type { Card, NodeRuntime, NodeStatus, PathNode, ReviewState, WordFamily } from './types';
 
-/** 判定一个词族是否已掌握：识别方向达到稳定度与复现次数门槛 */
+/**
+ * 判定一个词族是否已掌握：识别方向达到稳定度与复现次数门槛。
+ *
+ * `minStabilityDays` 是 FSRS 稳定度（**天**），默认 21 —— 含义是"能记住三周以上"。
+ * 实测连续答对两次 S≈13.8 天、三次 S≈57 天，因此 21 天大致等价于"答对 3 次"，
+ * 与迁移前的强度相当（旧口径是 0–1 的启发式 ≥ 0.8 且 reps ≥ 3）。
+ */
 export function isFamilyKnown(
   familyId: string,
   cardsByFamily: Map<string, Card[]>,
   states: Map<string, ReviewState>,
-  minStability = 0.8,
+  minStabilityDays = 21,
   minReps = 3,
 ) {
   const cards = cardsByFamily.get(familyId) ?? [];
@@ -13,7 +19,7 @@ export function isFamilyKnown(
   if (!receptive.length) return false;
   return receptive.every((card) => {
     const state = states.get(card.id);
-    return !!state && state.stability >= minStability && state.reps >= minReps;
+    return !!state && state.stability >= minStabilityDays && state.reps >= minReps;
   });
 }
 
@@ -59,7 +65,7 @@ export function computeRuntime(
     const learned = nodeCards.filter((c) => (states.get(c.id)?.reps ?? 0) > 0).length;
     const mastered = nodeCards.filter((c) => {
       const s = states.get(c.id);
-      return !!s && s.stability >= node.masteryRule.minStability && s.reps >= node.masteryRule.minReps;
+      return !!s && s.stability >= node.masteryRule.minStabilityDays && s.reps >= node.masteryRule.minReps;
     }).length;
     const due = nodeCards.some((c) => {
       const s = states.get(c.id);

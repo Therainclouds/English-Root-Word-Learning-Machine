@@ -277,6 +277,62 @@ try {
       `相似释义未进选项 ${noOverlap}`,
   );
 
+  /* AC-13 排程引擎（FSRS-6）与目标保持率必须真实生效 */
+  const {
+    schedule, configureScheduler, createInitialState, currentRetention, retentionOf, FSRS_BASE_PARAMS,
+  } = require(join(outDir, 'lib/srs.js'));
+
+  const probeCard = { id: 'w.probe:rec', direction: 'receptive', interleaveGroup: 0 };
+  const probeSeq = (retention) => {
+    configureScheduler(retention);
+    let state = createInitialState(probeCard);
+    const seq = [];
+    let now = Date.now();
+    for (let i = 0; i < 4; i += 1) {
+      state = schedule(state, 4, now); // 4 = 答对（D12 的 GRADE_RIGHT）
+      seq.push(state.intervalDays);
+      now = state.dueAt;
+    }
+    return seq;
+  };
+  const seq90 = probeSeq(0.9);
+  const seq95 = probeSeq(0.95);
+  const engineOk =
+    seq90.length === 4 &&
+    seq90[3] > seq90[0] * 5 && // 间隔必须随成功复习持续增长
+    seq95[3] < seq90[3] && // 目标保持率越高，间隔越短
+    FSRS_BASE_PARAMS.enable_short_term === false && // 不启用分钟级步骤（学习页按 index 消费队列）
+    FSRS_BASE_PARAMS.maximum_interval === 365;
+  check(
+    'AC-13 FSRS 排程 + 目标保持率生效',
+    engineOk && currentRetention() === 0.95,
+    `保持率 0.9 → ${seq90.join('/')} 天；0.95 → ${seq95.join('/')} 天；当前生效 ${currentRetention()}`,
+  );
+
+  /* AC-14 旧数据迁移：SM-2 时代的 0–1 stability 不能被当成"不到 1 天" */
+  configureScheduler(0.9);
+  const legacyState = {
+    cardId: 'w.legacy:rec', dueAt: Date.now(), intervalDays: 35, lapses: 0, reps: 4,
+    direction: 'receptive', stability: 0.8, interleaveGroup: 0,
+    lastReviewedAt: Date.now() - 35 * 86400000,
+  };
+  const migratedNext = schedule(legacyState, 4, Date.now());
+  check(
+    'AC-14 旧状态迁移（0–1 → 天数）',
+    migratedNext.intervalDays >= 21 && migratedNext.difficulty >= 1 && migratedNext.difficulty <= 10,
+    `旧用户（已复习 4 次 / 上次间隔 35 天）再答对一次 → 下次 ${migratedNext.intervalDays} 天，D=${migratedNext.difficulty.toFixed(2)}`,
+  );
+
+  /* AC-15 实际保持率统计（零参数的个体基准指标） */
+  const statLogs = [...Array(80).fill({ grade: 4 }), ...Array(20).fill({ grade: 0 })];
+  const stats = retentionOf(statLogs);
+  const emptyStats = retentionOf([]);
+  check(
+    'AC-15 实际保持率统计',
+    Math.abs(stats.rate - 0.8) < 1e-9 && stats.sample === 100 && stats.enough === true && emptyStats.rate === null,
+    `80/100 → ${stats.rate}（样本 ${stats.sample}）；空样本 → ${emptyStats.rate}`,
+  );
+
   /* 附加观测：对真实词表的切出率（有词表文件时才跑，不作断言） */
   const listPath = join(root, 'public/wordlists/top-10000.txt');
   if (existsSync(listPath)) {

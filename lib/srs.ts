@@ -1,83 +1,193 @@
+import { createEmptyCard, fsrs, Rating, State, type Card as FsrsCard } from 'ts-fsrs';
 import type { Card, ReviewState } from './types';
 import { clamp } from './utils';
 
 /**
- * SM-2 排程（预留 FSRS 接口：替换本文件的 schedule 即可）。
- * 依据：间隔效应 + 提取练习；排程必须确定性，不能交给 LLM。
+ * 排程引擎：FSRS-6（`ts-fsrs`，MIT）。
+ *
+ * 依据 DSR 模型（Difficulty / Stability / Retrievability）+ 幂律遗忘曲线，
+ * 21 个参数取官方默认值——那是在约 17 亿条真实复习记录上训练出来的
+ * （见 `docs/learning-science.md` 与 specs/008）。不再使用 SM-2（1987）的
+ * "ease × 固定乘数"：1987 年没有数据可用，现在有了。
+ *
+ * 保留的硬约束：排程必须是**确定性**的，不能交给 LLM（D4）。
  */
 
-export const GRADE_OPTIONS = [
-  { value: 0, label: '忘了', hint: '完全想不起来' },
-  { value: 3, label: '困难', hint: '想起来了但很吃力' },
-  { value: 4, label: '良好', hint: '稍作思考后答对' },
-  { value: 5, label: '简单', hint: '立刻答出' },
-] as const;
+/** 客观判定只有两档（D12）：答错 = Again，答对 = Good */
+function ratingOf(grade: number) {
+  return grade >= 3 ? Rating.Good : Rating.Again;
+}
 
-/** 新卡前几次的间隔（天），符合"目标保持期的 10%-20%"缩放 */
-const INITIAL_INTERVALS = [1, 3, 7, 16, 35];
+/**
+ * 调度器参数。
+ *
+ * - `enable_fuzz`：给长间隔加抖动，避免同批导入的卡永远撞在同一天到期
+ * - `enable_short_term: false`：**不**启用分钟级学习步骤。学习页是单次会话线性推进
+ *   （按 index 顺序消费队列），分钟级到期卡会让队列在会话中途重排、直接导致跳卡；
+ *   要启用必须先把它改成"按 cardId 定位当前卡"，属后续工作。
+ * - `maximum_interval: 365`：一年封顶。实测默认参数下"连续答对 5 次"会排到 586 天后，
+ *   对语言学习不现实；封顶后长间隔仍正常维持，只是不再无限拉长。
+ */
+export const FSRS_BASE_PARAMS = {
+  enable_fuzz: true,
+  enable_short_term: false,
+  maximum_interval: 365,
+} as const;
+
+/** 目标保持率可用区间：下限会让间隔夸张到失真，上限会让复习量爆炸 */
+const RETENTION_RANGE: [number, number] = [0.7, 0.97];
+const DEFAULT_RETENTION = 0.9;
+
+let scheduler = fsrs({ ...FSRS_BASE_PARAMS, request_retention: DEFAULT_RETENTION });
+/** 当前生效的保持率（ts-fsrs 的 FSRS 实例不暴露 params，自己记一份） */
+let activeRetention = DEFAULT_RETENTION;
+
+/**
+ * 注入目标保持率 —— 让设置页的「目标保持率」滑块真正生效。
+ *
+ * 此前 `learning.retentionTarget` 是个摆设：设置页有滑块、类型里有字段、默认值也有，
+ * 但排程代码从未读过它。FSRS 的 `request_retention` 正是它的归宿：
+ * 实测 0.9 → 间隔序列 [14, 57, 196] 天，0.95 → [6, 15, 34] 天。
+ *
+ * @returns 实际生效的保持率（可能被夹到合法区间）
+ */
+export function configureScheduler(retention?: number) {
+  const value = clamp(retention ?? DEFAULT_RETENTION, RETENTION_RANGE[0], RETENTION_RANGE[1]);
+  scheduler = fsrs({ ...FSRS_BASE_PARAMS, request_retention: value });
+  activeRetention = value;
+  return value;
+}
+
+/** 当前生效的保持率（供界面回显与自检） */
+export function currentRetention() {
+  return activeRetention;
+}
+
+const DAY_MS = 86400000;
+
+/**
+ * 是否是 SM-2 时代的旧状态。
+ * 旧 `stability` 是 0–1 的启发式掌握度，直接喂给 FSRS 会被当成"不到 1 天"，严重低估。
+ */
+function looksLegacy(state: ReviewState) {
+  return state.reps > 0 && state.stability <= 1;
+}
+
+/**
+ * 迁移旧状态：用 `intervalDays` 重新估计 S。
+ * FSRS 的定义保证 I(0.9) = S，所以"上次被安排的间隔"就是 S 最合理的估计。
+ */
+function toFsrsCard(state: ReviewState): FsrsCard {
+  const legacy = looksLegacy(state);
+  return {
+    due: new Date(state.dueAt),
+    stability: legacy ? Math.max(1, state.intervalDays) : state.stability,
+    difficulty: state.difficulty ?? 5,
+    elapsed_days: state.elapsedDays ?? 0,
+    scheduled_days: state.intervalDays,
+    learning_steps: state.learningSteps ?? 0,
+    reps: state.reps,
+    lapses: state.lapses,
+    state: (state.fsrsState ?? (state.reps > 0 ? State.Review : State.New)) as State,
+    last_review: state.lastReviewedAt ? new Date(state.lastReviewedAt) : undefined,
+  };
+}
 
 export function createInitialState(card: Card, now = Date.now()): ReviewState {
+  const empty = createEmptyCard(new Date(now));
   return {
     cardId: card.id,
     dueAt: now,
     intervalDays: 0,
-    ease: 2.5,
     lapses: 0,
     reps: 0,
     direction: card.direction,
-    stability: 0,
+    stability: empty.stability,
+    difficulty: empty.difficulty,
+    fsrsState: empty.state,
+    learningSteps: 0,
+    elapsedDays: 0,
     interleaveGroup: card.interleaveGroup,
   };
 }
 
 /** 核心排程：输入当前状态与评分，输出新状态 */
 export function schedule(state: ReviewState, grade: number, now = Date.now()): ReviewState {
-  const ef = updateEase(state.ease, grade);
-  const next: ReviewState = { ...state, ease: ef, lastReviewedAt: now };
+  const prev = toFsrsCard(state);
+  const { card } = scheduler.next(prev, new Date(now), ratingOf(grade));
 
-  if (grade < 3) {
-    next.lapses = state.lapses + 1;
-    next.reps = 0;
-    next.intervalDays = 1;
-  } else {
-    next.reps = state.reps + 1;
-    if (next.reps <= INITIAL_INTERVALS.length) {
-      const factor = grade === 5 ? 1.3 : grade === 3 ? 0.8 : 1;
-      next.intervalDays = Math.max(1, Math.round(INITIAL_INTERVALS[next.reps - 1] * factor));
-    } else {
-      const factor = grade === 5 ? 1.2 : grade === 3 ? 0.85 : 1;
-      next.intervalDays = Math.max(1, Math.round(state.intervalDays * ef * factor));
-    }
-  }
+  // 自己算 elapsedDays：ts-fsrs 的 `card.elapsed_days` 已标记 deprecated，不依赖它
+  const elapsedDays = state.lastReviewedAt
+    ? Math.max(0, Math.round((now - state.lastReviewedAt) / DAY_MS))
+    : 0;
 
-  next.dueAt = now + next.intervalDays * 86400000;
-  next.stability = computeStability(next.reps, next.lapses, grade);
-  return next;
-}
-
-function updateEase(ease: number, grade: number) {
-  // 客观判定只有"对 / 错"两档（D12）。若按 SM-2 原始公式把答错当作 q=0，
-  // 一次失误就扣 0.8 的 ease（2.5 → 1.7，两次触底 1.3），此后即便一路答对，
-  // 间隔按 ef 缩放也几乎不再增长 —— 两次手滑等于这个词永久报废。
-  // 这里把答对映射为 q=4（ease 不变）、答错映射为 q=2（−0.32），方向不变但留出恢复空间；
-  // grade 5 仍按 q=5 处理，供将来恢复难度自评时使用。
-  const q = grade >= 5 ? 5 : grade >= 3 ? 4 : 2;
-  const next = ease + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-  return clamp(Number(next.toFixed(3)), 1.3, 3.2);
-}
-
-function computeStability(reps: number, lapses: number, grade: number) {
-  const base = reps === 0 ? 0 : 1 - 1 / (1 + reps);
-  // 失误惩罚：0.12/次会让"错过一次"的词族需要连续答对约 10 次才够到
-  // path.ts 的掌握线（stability ≥ 0.8），体感是永远解锁不了。降为 0.06/次后约 6 次。
-  const penalty = Math.max(0, 1 - lapses * 0.06);
-  const recency = grade < 3 ? 0.4 : grade === 3 ? 0.75 : 1;
-  return clamp(base * penalty * recency, 0, 1);
+  return {
+    ...state,
+    dueAt: card.due.getTime(),
+    intervalDays: Math.max(0, card.scheduled_days),
+    stability: card.stability,
+    difficulty: card.difficulty,
+    fsrsState: card.state,
+    learningSteps: card.learning_steps,
+    reps: card.reps,
+    lapses: card.lapses,
+    elapsedDays,
+    lastReviewedAt: now,
+  };
 }
 
 export function isDue(state: ReviewState | undefined, now = Date.now()) {
   return !state || state.dueAt <= now;
 }
+
+/* ---------------- 可提取性与真实保持率 ---------------- */
+
+/**
+ * FSRS-6 遗忘曲线：R(t,S) = (1 + factor · t/S)^(−w20)，
+ * 其中 factor = 0.9^(−1/w20) − 1 保证 R(S,S) = 0.9。
+ * w20 取官方默认参数集的第 21 个值（我们只使用默认参数集）。
+ */
+const DECAY = 0.1542;
+
+export function forgettingCurve(elapsedDays: number, stabilityDays: number) {
+  if (stabilityDays <= 0) return 0;
+  const factor = Math.pow(0.9, -1 / DECAY) - 1;
+  return Math.pow(1 + factor * (elapsedDays / stabilityDays), -DECAY);
+}
+
+/** 某张卡当前的可提取性（0–1）：0 = 完全忘了，1 = 刚复习完 */
+export function retrievability(state: ReviewState | undefined, now = Date.now()) {
+  if (!state) return 0;
+  if (state.reps === 0 || state.stability <= 0) return 1;
+  const elapsed = Math.max(0, (now - (state.lastReviewedAt ?? now)) / DAY_MS);
+  return forgettingCurve(elapsed, state.stability);
+}
+
+export interface RetentionStats {
+  /** 实测保持率（0–1）；样本为 0 时返回 null */
+  rate: number | null;
+  /** 参与统计的复习次数 */
+  sample: number;
+  /** 样本是否足够（< 20 次只作参考） */
+  enough: boolean;
+}
+
+/**
+ * 「我的真实保持率」：最近 N 次复习里答对的比例。
+ *
+ * 为什么值得单独做：官方基准显示 MOVING-AVG（零参数，只用"用户近期的平均保持率"）
+ * 的预测误差 0.3369，几乎追平最强配置 FSRS-7 recency（0.3363）——
+ * 也就是说**"这个人整体是什么水平"比算法结构更决定预测能力**。
+ * 把这个数字直接摊给学习者看，是零参数、零风险的收益。
+ */
+export function retentionOf(logs: { grade: number }[], windowSize = 100): RetentionStats {
+  const recent = logs.slice(-windowSize);
+  if (!recent.length) return { rate: null, sample: 0, enough: false };
+  const hit = recent.filter((l) => l.grade >= 3).length;
+  return { rate: hit / recent.length, sample: recent.length, enough: recent.length >= 20 };
+}
+
+/* ---------------- 组卷 ---------------- */
 
 /** 交错：同组不相邻登场 */
 function interleave<T>(items: T[], groupOf: (t: T) => number): T[] {

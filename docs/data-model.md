@@ -128,7 +128,7 @@ UserProfile / Settings / ReviewLog
 | 字段 | 说明 |
 | --- | --- |
 | `card_id` | 主键 |
-| `due_at`, `interval_days`, `ease`, `lapses`, `reps` | SM-2 状态 |
+| `due_at`, `interval_days`, `stability`, `difficulty`, `state`, `lapses`, `reps` | FSRS 状态（`stability` 单位是天） |
 | `direction` | `receptive` / `productive` |
 | `interleave_group` | 交错组：同词族/同语义场的卡分到**不同**组 |
 | `stability` | 掌握度（供路径解锁判定） |

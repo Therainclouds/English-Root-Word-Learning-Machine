@@ -22,7 +22,14 @@ import {
 } from './db';
 import { ensurePassagesSeeded, ensureSeeded } from './data/seed';
 import { setLlmUser } from './llm/telemetry';
-import { buildSession, createInitialState, isMorphemeCard, schedule } from './srs';
+import {
+  buildSession,
+  configureScheduler,
+  createInitialState,
+  isMorphemeCard,
+  retentionOf,
+  schedule,
+} from './srs';
 import { computeKnownFamilies, computeRuntime } from './path';
 import { estimateCoverage } from './coverage';
 import { todayKey } from './utils';
@@ -146,6 +153,18 @@ export function useApp() {
     return states.filter((s) => s.reps > 0 && s.dueAt <= now).length;
   }, [states]);
 
+  /**
+   * 把设置页的「目标保持率」注入排程。
+   * 此前 `learning.retentionTarget` 是**摆设**：设置页有滑块、类型与默认值都有，
+   * 但排程代码从未读过它。现在它直接决定 FSRS 的 `request_retention`。
+   */
+  useEffect(() => {
+    configureScheduler(learning.retentionTarget);
+  }, [learning.retentionTarget]);
+
+  /** 我的真实保持率：最近 100 次复习的答对比例（零参数的"个体基准"指标） */
+  const retention = useMemo(() => retentionOf(logs), [logs]);
+
   const learnedToday = useMemo(() => {
     const key = todayKey();
     return logs.filter((l) => todayKey(new Date(l.reviewedAt)) === key).length;
@@ -182,12 +201,16 @@ export function useApp() {
       if (!userId) return;
       const current = stateMap.get(card.id) ?? createInitialState(card);
       const next = schedule(current, value);
+      const reviewedAt = Date.now();
       await reviewRepo.put(userId, next);
       await reviewRepo.log(userId, {
         cardId: card.id,
-        reviewedAt: Date.now(),
+        reviewedAt,
         grade: value,
         direction: card.direction,
+        // FSRS 参数优化的必需特征，且无法事后回填：现在不记，将来拿不到
+        elapsedDays: current.elapsedDays,
+        stateBefore: current.fsrsState,
       });
 
       const key = todayKey();
@@ -211,7 +234,14 @@ export function useApp() {
       setStates((prev) => [...prev.filter((s) => s.cardId !== card.id), next]);
       setLogs((prev) => [
         ...prev,
-        { cardId: card.id, reviewedAt: Date.now(), grade: value, direction: card.direction },
+        {
+          cardId: card.id,
+          reviewedAt,
+          grade: value,
+          direction: card.direction,
+          elapsedDays: current.elapsedDays,
+          stateBefore: current.fsrsState,
+        },
       ]);
       setProfile(nextProfile);
     },
@@ -303,6 +333,7 @@ export function useApp() {
     runtime,
     dueCount,
     learnedToday,
+    retention,
     session,
     grade,
     saveSettings,

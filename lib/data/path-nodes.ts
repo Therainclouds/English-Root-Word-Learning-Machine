@@ -16,7 +16,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: [],
     targetFamilyIds: [],
     estimatedMinutes: 600,
-    masteryRule: { minStability: 0.85, minReps: 4 },
+    masteryRule: { minStabilityDays: 21, minReps: 4 },
   },
   {
     id: 's1-k1b',
@@ -29,7 +29,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-k1a'],
     targetFamilyIds: [],
     estimatedMinutes: 900,
-    masteryRule: { minStability: 0.85, minReps: 4 },
+    masteryRule: { minStabilityDays: 21, minReps: 4 },
   },
   {
     id: 's1-read-a1',
@@ -42,7 +42,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-k1a'],
     targetFamilyIds: [],
     estimatedMinutes: 300,
-    masteryRule: { minStability: 0.8, minReps: 3 },
+    masteryRule: { minStabilityDays: 14, minReps: 3 },
   },
   {
     id: 's1-k2',
@@ -55,7 +55,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-k1b'],
     targetFamilyIds: [],
     estimatedMinutes: 1200,
-    masteryRule: { minStability: 0.85, minReps: 4 },
+    masteryRule: { minStabilityDays: 21, minReps: 4 },
   },
   {
     id: 's1-read-a2',
@@ -68,7 +68,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-k2', 's1-read-a1'],
     targetFamilyIds: [],
     estimatedMinutes: 400,
-    masteryRule: { minStability: 0.8, minReps: 3 },
+    masteryRule: { minStabilityDays: 14, minReps: 3 },
   },
   {
     id: 's1-k3',
@@ -81,7 +81,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-k2'],
     targetFamilyIds: [],
     estimatedMinutes: 1500,
-    masteryRule: { minStability: 0.85, minReps: 4 },
+    masteryRule: { minStabilityDays: 21, minReps: 4 },
   },
   {
     id: 's2-pattern',
@@ -94,7 +94,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-read-a2'],
     targetFamilyIds: [],
     estimatedMinutes: 600,
-    masteryRule: { minStability: 0.85, minReps: 5 },
+    masteryRule: { minStabilityDays: 21, minReps: 5 },
   },
   {
     id: 's2-chunk',
@@ -107,7 +107,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s2-pattern'],
     targetFamilyIds: [],
     estimatedMinutes: 700,
-    masteryRule: { minStability: 0.85, minReps: 5 },
+    masteryRule: { minStabilityDays: 21, minReps: 5 },
   },
   {
     id: 's2-scene',
@@ -120,7 +120,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s2-chunk'],
     targetFamilyIds: [],
     estimatedMinutes: 800,
-    masteryRule: { minStability: 0.8, minReps: 4 },
+    masteryRule: { minStabilityDays: 14, minReps: 4 },
   },
   {
     id: 's3-academic',
@@ -133,7 +133,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s1-k3'],
     targetFamilyIds: [],
     estimatedMinutes: 1500,
-    masteryRule: { minStability: 0.85, minReps: 4 },
+    masteryRule: { minStabilityDays: 21, minReps: 4 },
   },
   {
     id: 's3-root',
@@ -146,7 +146,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s3-academic'],
     targetFamilyIds: [],
     estimatedMinutes: 900,
-    masteryRule: { minStability: 0.8, minReps: 4 },
+    masteryRule: { minStabilityDays: 14, minReps: 4 },
   },
   {
     id: 's3-output',
@@ -159,7 +159,7 @@ export const PATH_NODES: PathNode[] = [
     prereqIds: ['s2-scene'],
     targetFamilyIds: [],
     estimatedMinutes: 1000,
-    masteryRule: { minStability: 0.8, minReps: 4 },
+    masteryRule: { minStabilityDays: 14, minReps: 4 },
   },
 ];
 

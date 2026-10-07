@@ -170,12 +170,23 @@ export interface ReviewState {
   cardId: string;
   dueAt: number; // epoch ms
   intervalDays: number;
-  ease: number;
   lapses: number;
   reps: number;
   direction: Direction;
-  /** 0-1，掌握度，用于路径解锁与覆盖率判定 */
+  /**
+   * FSRS 稳定度，**单位是天**：定义为"可回忆概率从 100% 衰减到 90% 所需的时间"。
+   * 因此当目标保持率为 90% 时，下次间隔 ≈ stability。
+   * ⚠️ SM-2 时代该字段是 0–1 的启发式掌握度；旧数据迁移时按 `intervalDays` 重新估计（见 `lib/srs.ts`）。
+   */
   stability: number;
+  /** FSRS 难度 [1, 10]：越大表示稳定性增长越慢 */
+  difficulty: number;
+  /** FSRS 卡片状态：0=New 1=Learning 2=Review 3=Relearning */
+  fsrsState: number;
+  /** 当前学习步骤下标（未启用分钟级步骤时恒为 0） */
+  learningSteps: number;
+  /** 本次复习距上次复习的天数（写入日志，供将来优化 FSRS 参数使用） */
+  elapsedDays: number;
   interleaveGroup: number;
   lastReviewedAt?: number;
 }
@@ -186,6 +197,13 @@ export interface ReviewLog {
   reviewedAt: number;
   grade: number;
   direction: Direction;
+  /**
+   * 本次复习距上次的天数。
+   * FSRS 参数优化的必需特征，且**无法事后回填**——不在当下记录，将来就拿不到。
+   */
+  elapsedDays?: number;
+  /** 复习前的卡片状态（New/Learning/Review/Relearning） */
+  stateBefore?: number;
 }
 
 export type PathNodeType =
@@ -210,7 +228,8 @@ export interface PathNode {
   prereqIds: string[];
   targetFamilyIds: string[];
   estimatedMinutes: number;
-  masteryRule: { minStability: number; minReps: number };
+  /** 掌握门槛：`minStabilityDays` 是 FSRS 稳定度（**天**），如 21 表示"能记三周以上" */
+  masteryRule: { minStabilityDays: number; minReps: number };
 }
 
 export interface NodeRuntime {

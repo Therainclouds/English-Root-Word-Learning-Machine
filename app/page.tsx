@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Flame, Layers, Timer, TrendingUp } from 'lucide-react';
+import { ArrowRight, Flame, Gauge, Layers, Timer, TrendingUp } from 'lucide-react';
 import { useAppContext } from '@/components/app-provider';
 import { PathCanvas } from '@/components/path-canvas';
 import { STATUS_META } from '@/lib/path';
 
 export default function DashboardPage() {
-  const { ready, loadError, coverage, profile, nodes, runtime, session, dueCount } = useAppContext();
+  const { ready, loadError, coverage, profile, nodes, runtime, session, dueCount, retention, settings } =
+    useAppContext();
   const [selected, setSelected] = useState<string | null>(null);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selected) ?? null, [nodes, selected]);
@@ -71,6 +72,16 @@ export default function DashboardPage() {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Stat icon={<Layers className="size-4" />} label="已掌握词族" value={`${coverage.known}`} hint={`估计水平 ${coverage.cefr}`} />
+          <Stat
+            icon={<Gauge className="size-4" />}
+            label="实际保持率"
+            value={retention.rate === null ? '—' : `${Math.round(retention.rate * 100)}%`}
+            hint={
+              retention.rate === null
+                ? '复习几次后显示'
+                : `目标 ${Math.round(settings.learning.retentionTarget * 100)}% · 近 ${retention.sample} 次`
+            }
+          />
           <Stat icon={<Timer className="size-4" />} label="今日待复习" value={`${dueCount}`} hint="到期卡片数量" />
           <Stat icon={<TrendingUp className="size-4" />} label="今日队列" value={`${session.queue.length}`} hint={`新词 ${session.newCount} · 复习 ${session.dueCount}`} />
           <Stat icon={<Flame className="size-4" />} label="连续学习" value={`${profile.dailyStreak} 天`} hint="坚持比强度更重要" />

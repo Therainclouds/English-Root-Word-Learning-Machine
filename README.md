@@ -58,8 +58,9 @@ node scripts/fetch-wordlist.mjs 3000    # → public/wordlists/top-10000.txt
 | `node scripts/verify-s002.mjs` | 释义按需生成验收（13 项） |
 | `node scripts/verify-s005.mjs` | LLM 重试/缓存/用量验收（16 项） |
 | `node scripts/verify-legacy-word.mjs` | 旧数据不被覆盖回归（6 项） |
-| `node scripts/verify-morphemes.mjs` | 词根数据离线自检（12 项，纯 node 无需浏览器） |
+| `node scripts/verify-morphemes.mjs` | 词根数据 + FSRS 排程离线自检（15 项，纯 node 无需浏览器） |
 | `node scripts/verify-s007.mjs` | 词根模块运行时验收（16 项） |
+| `node scripts/verify-fsrs.mjs` | FSRS 落库字段 / 日志特征 / 保持率面板（6 项） |
 
 验收脚本前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
 
@@ -81,7 +82,7 @@ components/   Canvas 路径可视化、导航、主题 Provider
 components/ui/      shadcn + Radix 控件（slider / switch / select / label）
 lib/quiz.ts   客观出题器（四选一干扰项 + 输入题答案集）
 lib/
-  srs.ts      SM-2 排程（可替换 FSRS）
+  srs.ts      FSRS-6 排程（ts-fsrs）+ 组卷 / 交错 / 词根独立预算
   coverage.ts 覆盖率估算（Nation 分频段经验值）
   path.ts     节点状态机
   llm/        可插拔适配器：OpenAI 兼容 / Anthropic / Ollama（morpheme.ts 为词根助记）
@@ -181,11 +182,32 @@ npm run dev
 | 识别（给词说意思 / 给词说切分） | 四选一（干扰项取自词库中其他词的释义或切分） | 是否命中答案集 |
 | 产出（给释义拼词 / 给词根写派生词） | 输入框 | 必须**完全一致**；"拼写接近"也判错（只提示差在哪） |
 
-判定后自动记分：答错 → `0`（lapse，明天重来）；答对 → `4`（良好，按 SM-2 推进）。
+判定后自动记分：答错 → `0`（lapse，FSRS 记为 Again）；答对 → `4`（良好，FSRS 记为 Good）。
 快捷键：选择题 `1-4`，输入题 `Enter` 提交，判定后 `空格` 下一张。
 
 无法客观出题的卡（**释义或切分还没生成**）不会进入队列，页面顶部会提示数量并给出
 「去设置页批量生成释义」入口 —— 生成后自动回到队列。
+
+## 排程引擎：FSRS-6（S-008）
+
+排程由 `lib/srs.ts` 负责，引擎是 **FSRS-6**（`ts-fsrs`，MIT）。参数取官方默认值——
+那是在约 **17 亿条**真实复习记录上训练出来的，**不需要用户先攒够数据**：
+官方基准里默认参数 log loss 0.3620、个人优化后 0.3460，差距只有约 4.4%。
+
+- **状态**：`stability`（**单位天**，定义为"可回忆概率衰减到 90% 所需时间"）+ `difficulty`(1–10) + `state`
+- **目标保持率真正生效**：设置页滑块直接映射到 `request_retention`。
+  实测 90% → 间隔 3/13/58/194 天；95% → 3/5/13/29 天
+  （此前该滑块是**摆设**：UI 能拖、类型与默认值都有，但排程代码从未读过它）
+- **Fuzz**：给长间隔加抖动，避免同批导入的卡永远撞在同一天到期
+- **最大间隔 365 天**：默认参数下"连续答对 5 次"会排到 586 天后，对语言学习不现实
+- **旧数据自动迁移**：SM-2 时代的 `stability` 是 0–1 启发式，读取时按 `intervalDays` 重估为天数，
+  老用户的进度不会被打回起点
+- **掌握门槛**：`minStabilityDays`（词汇节点 21 天 ≈ "能记三周"），替代旧的 0–1 口径
+- **首页「实际保持率」**：最近 100 次复习的答对比例，与目标保持率并排显示。依据是基准里
+  零参数的移动平均（0.3369）几乎追平最强配置（0.3363）——**个体基准比算法结构更决定预测能力**
+
+验收：`node scripts/verify-morphemes.mjs`（AC-13~15）+ `node scripts/verify-fsrs.mjs`，
+详见 `specs/008-fsrs-engine.md`。
 
 ## 词根词缀模块（S-007）
 
