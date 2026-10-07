@@ -109,6 +109,9 @@ export default function SettingsPage() {
   const [dictState, setDictState] = useState<string | null>(null);
   /** 批量补全时是否连内置词典来源的释义一起重写（S-009 数据质量有限，配好大模型后可升级） */
   const [redoDict, setRedoDict] = useState(false);
+  const [burdenRunning, setBurdenRunning] = useState(false);
+  const [burdenState, setBurdenState] = useState<string | null>(null);
+  const [burdenCount, setBurdenCount] = useState(20);
 
   if (!ready) {
     return <div className="py-24 text-center text-sm text-muted-foreground">载入中…</div>;
@@ -729,6 +732,63 @@ export default function SettingsPage() {
           <code> UPSTREAM_BASE_URL=https://{'{WorkspaceId}'}.{'{region}'}.maas.aliyuncs.com</code>、
           <code> UPSTREAM_PATH_PREFIX=/compatible-mode</code>。
         </p>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-border/60 bg-card/40 p-5">
+        <div className="flex items-center gap-2">
+          <Scale className="size-4 text-primary" />
+          <h2 className="text-lg font-semibold">学习负担评分（S-004）</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          用决策模型给每个词族打 <b>1–5 的学习负担</b>（形音匹配 / 拼写透明度 / 语义复杂度 / 与母语距离），
+          替代原来按<b>词长</b>猜测的启发式。结果写回共享词库，所有人复用。
+          模型关闭或置信度低于 0.5 时自动回退启发式，<b>不阻塞学习</b>。
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={300}
+            value={burdenCount}
+            onChange={(e) => setBurdenCount(Number(e.target.value))}
+            className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+          />
+          <button
+            data-testid="batch-burden-btn"
+            disabled={!decision.enabled || burdenRunning}
+            onClick={async () => {
+              setBurdenRunning(true);
+              setBurdenState('评分中…');
+              try {
+                const { scoreBurdens } = await import('@/lib/burden');
+                const r = await scoreBurdens(decision, burdenCount, (done, total) =>
+                  setBurdenState(`评分中… ${done}/${total}`),
+                );
+                setBurdenState(
+                  `完成：${r.total} 个词族，模型评分 ${r.fromModel}、启发式回退 ${r.fallback}，` +
+                    `分布 ${JSON.stringify(r.distribution)}，耗时 ${r.durationMs}ms`,
+                );
+                await reload();
+              } catch (err) {
+                setBurdenState(`失败：${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setBurdenRunning(false);
+              }
+            }}
+            className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs disabled:opacity-50"
+          >
+            {burdenRunning ? '评分中…' : '批量评分学习负担'}
+          </button>
+          {!decision.enabled && <span className="text-xs text-amber-400">需先启用决策模型</span>}
+        </div>
+        {burdenState && (
+          <pre
+            data-testid="burden-result"
+            className="whitespace-pre-wrap rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
+          >
+            {burdenState}
+          </pre>
+        )}
       </section>
 
       <section className="space-y-4 rounded-2xl border border-border/60 bg-card/40 p-5">

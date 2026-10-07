@@ -63,6 +63,7 @@ node scripts/fetch-wordlist.mjs 3000    # → public/wordlists/top-10000.txt
 | `node scripts/verify-s007.mjs` | 词根模块运行时验收（16 项） |
 | `node scripts/verify-fsrs.mjs` | FSRS 落库字段 / 日志特征 / 保持率面板（6 项） |
 | `node scripts/verify-dict.mjs` | 内置释义导入：覆盖率 ≥95%、重复导入稳定（5 项） |
+| `node scripts/verify-burden.mjs` | 学习负担评分：模型不可用时回退不阻塞、写回共享库（5 项） |
 
 验收脚本前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
 

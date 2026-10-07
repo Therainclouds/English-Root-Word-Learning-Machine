@@ -1,5 +1,6 @@
 'use client';
 
+import { heuristicBurden } from '../burden';
 import { cardsRepo, getSharedDb, passagesRepo, pathRepo, sentencesRepo, wordsRepo } from '../db';
 import { buildPassageEntities } from './passages';
 import type { Card, Cefr, FreqBand, Sentence, Sense, Word, WordFamily } from '../types';
@@ -54,7 +55,8 @@ export function buildSeedEntities() {
       stage: 1,
       pos,
       ipa,
-      learningBurden: lemma.length > 8 ? 3 : 2,
+      // 启发式初值；决策模型可用时由 lib/burden.ts 重新评分（S-004）
+      learningBurden: heuristicBurden(lemma),
       register: 'general',
       sources: ['seed'],
     });

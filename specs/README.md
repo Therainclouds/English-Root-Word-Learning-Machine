@@ -30,7 +30,7 @@
 | S-001 | [词表导入（3000+ 词族）](./001-wordlist-import.md) | **done**（11/11 验收通过） | D2 D6 |
 | S-002 | [释义按需生成与缓存](./002-definition-ondemand.md) | **done**（13/13 验收通过） | S-001, S-005 |
 | S-003 | [分级阅读器](./003-graded-reading.md) | **done**（12/12 验收通过） | S-001 |
-| S-004 | [学习负担评分（决策模型）](./004-learning-burden.md) | planned | D5 |
+| S-004 | [学习负担评分（决策模型）](./004-learning-burden.md) | **done**（运行时 5/5；评分值待真实凭据） | D5 |
 | S-005 | [LLM 调用健壮性](./005-llm-robustness.md) | **done**（16/16 验收通过） | — |
 | S-006 | 多设备同步（需要后端） | **暂缓** | D1 |
 | S-007 | [词根词缀模块（阶段 3 选修）](./007-morpheme-module.md) | **done**（离线 15/15 + 运行时 16/16） | D2 D4 D6 D8 D10 D11、S-001、S-005 |
@@ -53,6 +53,7 @@
 | `scripts/verify-fsrs.mjs` | FSRS 落库字段、日志特征、首页实际保持率面板（6 项） |
 | `scripts/verify-dict.mjs` | 内置释义数据可用、导入覆盖率 ≥95%、重复导入稳定（5 项） |
 | `scripts/verify-deploy.mjs` | **部署前自检**：产物路由完整、词典随包发布、真实静态托管下首页与子路由零 404 / 零控制台错误（8 项） |
+| `scripts/verify-burden.mjs` | 学习负担评分：回退不阻塞、写回共享库、值域 [1,5]（5 项；评分值需真实凭据） |
 | `scripts/build-definitions.mjs` | 构建期从 ECDICT 生成内置释义（`node scripts/build-definitions.mjs`） |
 
 前置：`npm run dev` 已启动，且 Edge/Chrome 以 `--remote-debugging-port=9222` 启动。
