@@ -21,6 +21,7 @@ import {
   wordsRepo,
 } from './db';
 import { ensurePassagesSeeded, ensureSeeded } from './data/seed';
+import { setDecisionFallbackLlm } from './llm/decision';
 import { setLlmUser } from './llm/telemetry';
 import {
   buildSession,
@@ -162,6 +163,15 @@ export function useApp() {
   useEffect(() => {
     configureScheduler(learning.retentionTarget);
   }, [learning.retentionTarget]);
+
+  /**
+   * 决策模型复用同一份大模型配置：用户只需要配一个 LLM。
+   * 没有单独的百炼凭据时，学习负担评分与例句质量校验都会走这个模型（JSON 约束输出）。
+   */
+  useEffect(() => {
+    setDecisionFallbackLlm(globalSettings.llm);
+    return () => setDecisionFallbackLlm(undefined);
+  }, [globalSettings.llm]);
 
   /** 我的真实保持率：最近 100 次复习的答对比例（零参数的"个体基准"指标） */
   const retention = useMemo(() => retentionOf(logs), [logs]);

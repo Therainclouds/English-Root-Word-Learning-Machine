@@ -81,6 +81,37 @@ const TURN_DECISION_OFF = `(async () => {
   return 'RESTORED';
 })()`;
 
+/**
+ * 按钮的可用条件是「存在判断后端」（百炼端点 或 已启用的大模型）。
+ * 这里临时填一个**无效** WorkspaceId：端点会被调用但必然失败，正好验证回退；跑完清除。
+ */
+const SET_FAKE_WORKSPACE = `(async () => {
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  for (let i = 0; i < 40; i++) {
+    if (document.querySelector('[data-testid=batch-burden-btn]')) break;
+    await wait(250);
+  }
+  const input = [...document.querySelectorAll('input')].find(i => (i.placeholder || '').includes('百炼控制台'));
+  if (!input) return 'NO_INPUT';
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  const before = input.value;
+  setter.call(input, 'test-invalid-workspace');
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await wait(700);
+  return 'SET_FROM:' + before;
+})()`;
+
+const CLEAR_WORKSPACE = `(async () => {
+  const input = [...document.querySelectorAll('input')].find(i => (i.placeholder || '').includes('百炼控制台'));
+  if (input && input.value === 'test-invalid-workspace') {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 600));
+  }
+  return 'CLEARED';
+})()`;
+
 const RUN_BURDEN = `(async () => {
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   for (let i = 0; i < 40; i++) {
@@ -131,12 +162,12 @@ const record = (name, pass, detail) => {
 const page = await openPage(`${APP}/settings/`);
 await sleep(6000);
 
-const switched = await page.evaluate(ENSURE_DECISION_ON);
+const switched = await page.evaluate(SET_FAKE_WORKSPACE);
 const before = JSON.parse(await page.evaluate(READ_BURDENS));
 const out = await page.evaluate(RUN_BURDEN);
 
-if (out === 'BUTTON_DISABLED' || out === 'NO_BUTTON' || switched === 'FAILED_ON' || switched === 'NO_SWITCH') {
-  console.log(`SKIP  AC-1/AC-2/AC-3/AC-4：无法驱动决策模型开关（${switched} / ${out}）`);
+if (out === 'BUTTON_DISABLED' || out === 'NO_BUTTON' || switched === 'NO_INPUT') {
+  console.log(`SKIP  AC-1/AC-2/AC-3/AC-4：无法驱动判断后端（${switched} / ${out}）`);
 } else {
   record('AC-2 批量评分执行完成（不阻塞）', typeof out === 'string' && out.includes('完成'), (out ?? '').slice(0, 130));
 
@@ -163,11 +194,17 @@ if (out === 'BUTTON_DISABLED' || out === 'NO_BUTTON' || switched === 'FAILED_ON'
     `回退 ${fallbackCount} 个（未填凭据时属预期行为）`,
   );
 
-  if (switched === 'TURNED_ON') await page.evaluate(TURN_DECISION_OFF);
-  console.log('ℹ️  决策模型开关已恢复原状态');
+  await page.evaluate(CLEAR_WORKSPACE);
+  console.log('ℹ️  临时写入的 WorkspaceId 已清除');
 }
 
-record('AC-5 控制台零错误', page.errors.length === 0, page.errors.slice(0, 2).join(' | ') || '无');
+// 本脚本会故意用一个无效端点触发回退，因此浏览器的 CORS / 网络失败属于**预期噪声**，需排除
+const realErrors = page.errors.filter((e) => !/CORS|ERR_FAILED|net::|Access-Control/i.test(e));
+record(
+  'AC-5 控制台零错误（排除脚本故意触发的网络错误）',
+  realErrors.length === 0,
+  realErrors.slice(0, 2).join(' | ') || `无（已排除预期网络错误 ${page.errors.length - realErrors.length} 条）`,
+);
 await page.close();
 
 const passed = results.filter((r) => r.pass).length;

@@ -639,12 +639,14 @@ export default function SettingsPage() {
       <section className="space-y-4 rounded-2xl border border-border/60 bg-card/40 p-5">
         <div className="flex items-center gap-2">
           <Scale className="size-4 text-primary" />
-          <h2 className="text-lg font-semibold">决策模型（例句质量校验）</h2>
+          <h2 className="text-lg font-semibold">判断后端（例句校验 / 负担评分）</h2>
         </div>
         <p className="text-xs text-muted-foreground">
-          千问 <code>decision-model-preview</code>：<b>只做判断、不生成文本</b>（官方标注最大输出长度 0），
-          一次请求返回分类 / 是非 / 评分的概率与置信度。本应用用它判断生成的例句是否地道、是否超纲、
-          是否用对了义项，不合格的句子直接丢弃。释义与例句的生成仍由上面的大模型负责。
+          <b>留空 WorkspaceId 即复用上面配置的大模型 —— 一个 LLM 通用，不必另开凭据。</b>
+          实现方式是用 JSON 约束让模型输出概率与置信度，完成「例句是否地道 / 是否超纲 / 是否用对义项」
+          与「学习负担 1–5」的判断。
+          若另配千问 <code>decision-model-preview</code>（只做判断、不生成文本、一次前向返回概率分布），
+          可靠性更高，更适合批量任务。
         </p>
 
         <div className="flex items-center justify-between rounded-lg border border-border bg-background/50 p-3 text-sm">
@@ -755,7 +757,10 @@ export default function SettingsPage() {
           />
           <button
             data-testid="batch-burden-btn"
-            disabled={!decision.enabled || burdenRunning}
+            disabled={
+              !(decision.workspaceId || decision.baseUrlOverride?.trim() || (llm.enabled && !!llm.baseUrl)) ||
+              burdenRunning
+            }
             onClick={async () => {
               setBurdenRunning(true);
               setBurdenState('评分中…');
